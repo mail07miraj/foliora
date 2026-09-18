@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Foliora Studio Suite</title>
+    <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="styles.css" rel="stylesheet">
+</head>
+<body class="text-slate-800 h-screen flex flex-col select-none">
+
+    <!-- Reusable Datalists -->
+    <datalist id="font-list">
+        <option value="Times New Roman"></option>
+        <option value="Arial"></option>
+        <option value="Calibri"></option>
+        <option value="BanglaOMR"></option>
+        <option value="ProshnaP"></option>
+        <option value="SutonnyMJ"></option>
+        <option value="Kalpurush"></option>
+        <option value="SolaimanLipi"></option>
+        <option value="Siyam Rupali"></option>
+        <option value="Vrinda"></option>
+    </datalist>
+
+    <datalist id="size-list">
+        <option value="8"></option><option value="9"></option><option value="10"></option>
+        <option value="10.5"></option><option value="11"></option><option value="12"></option>
+        <option value="13"></option><option value="14"></option><option value="16"></option>
+    </datalist>
+
+    <!-- TOP HEADER -->
+    <header class="bg-slate-900 text-white px-3.5 py-2.5 shadow-md border-b border-slate-800 flex items-center justify-between shrink-0 z-20">
+        <div class="flex items-center space-x-2.5">
+            <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-500 to-blue-600 flex items-center justify-center font-black text-sm tracking-wider text-white shadow-inner">
+                F
+            </div>
+            <div>
+                <div class="flex items-center space-x-1.5">
+                    <span class="text-sm font-extrabold tracking-tight text-white">FOLIORA</span>
+                    <span id="headerTierBadge" class="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 border border-slate-700">GUEST</span>
+                </div>
+                <p class="text-[10px] text-slate-400 font-medium">Publishing & Office Suite</p>
+            </div>
+        </div>
+        
+        <div class="flex items-center space-x-1.5">
+            <!-- Account / Profile Button -->
+            <button onclick="handleAccountButtonClick()" id="btnHeaderAccount" title="My Foliora Account" class="h-7 px-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-md transition text-xs flex items-center gap-1.5 border border-slate-700/60 bg-slate-800/50">
+                <span id="userAvatarIcon" class="w-4 h-4 rounded-full bg-slate-600 text-[10px] font-bold flex items-center justify-center text-slate-300">?</span>
+                <span id="userDisplayName" class="text-[11px] font-medium max-w-[65px] truncate hidden sm:inline">Sign In</span>
+            </button>
+
+            <!-- Dev & Supabase Settings Button -->
+            <button onclick="openEntitlementModal()" title="Backend & Tier Config" class="h-7 px-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-md transition text-xs flex items-center gap-1 border border-slate-700/60 bg-slate-800/40">
+                <i class="fas fa-plug text-emerald-400 text-xs"></i>
+                <span class="text-[10px] font-semibold hidden sm:inline">API</span>
+            </button>
+
+            <!-- Workspace Configurator Button -->
+            <button onclick="openWorkspaceModal()" title="Customize Workspace" class="w-7 h-7 flex items-center justify-center text-slate-300 hover:text-white hover:bg-slate-800 rounded-md transition text-xs border border-slate-700/60 bg-slate-800/40">
+                <i class="fas fa-sliders-h text-xs"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- PRIMARY PRODUCT NAVIGATION SWITCHER -->
+    <nav class="bg-slate-100 border-b border-slate-200 px-2 pt-2 flex space-x-1 overflow-x-auto text-xs shrink-0" id="productNav">
+        <button onclick="switchProduct('mcq')" id="pnav-mcq" class="product-nav-btn flex-1 py-2 px-2 font-bold rounded-t-lg transition flex items-center justify-center gap-1.5 border-t-2 border-l border-r border-transparent">
+            <i class="fas fa-list-check"></i> <span>MCQ Studio</span>
+        </button>
+        <button onclick="switchProduct('converter')" id="pnav-converter" class="product-nav-btn flex-1 py-2 px-2 font-bold rounded-t-lg transition flex items-center justify-center gap-1.5 border-t-2 border-l border-r border-transparent">
+            <i class="fas fa-language"></i> <span>Converter</span> <span class="text-[9px] bg-emerald-100 text-emerald-700 px-1 rounded font-normal">Free</span>
+        </button>
+        <button onclick="switchProduct('ocr')" id="pnav-ocr" class="product-nav-btn flex-1 py-2 px-2 font-bold rounded-t-lg transition flex items-center justify-center gap-1.5 border-t-2 border-l border-r border-transparent">
+            <i class="fas fa-eye"></i> <span>OCR Studio</span>
+        </button>
+    </nav>
+
+    <!-- MAIN SCROLLABLE CONTAINER -->
+    <main class="flex-1 overflow-y-auto p-3.5 relative">
+
+        <!-- GLOBAL HELPER NOTICE -->
+        <div id="helper-info" class="bg-blue-50 border border-blue-200/70 rounded-lg p-2.5 mb-3 flex items-start shadow-sm text-xs text-slate-600">
+            <i class="fas fa-info-circle text-blue-500 mt-0.5 mr-2"></i>
+            <span>Select text in Word first, then click any action below to process.</span>
+        </div>
+
+        <!-- PRODUCT 1: FOLORIA MCQ STUDIO -->
+        <section id="product-mcq" class="product-pane">
+            <div id="lock-mcq" class="hidden bg-white/95 backdrop-blur-sm border border-slate-200 rounded-xl p-6 text-center shadow-lg my-6">
+                <div class="w-12 h-12 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-3 text-xl">
+                    <i class="fas fa-lock"></i>
+                </div>
+                <h3 class="text-sm font-bold text-slate-800">Foliora MCQ Studio Locked</h3>
+                <p id="lockMcqReason" class="text-xs text-slate-500 mt-1 mb-4">Please sign in to your Foliora account to access MCQ Studio.</p>
+                <button onclick="handleLockAction('mcq')" class="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold py-2 px-4 rounded-lg text-xs shadow hover:from-blue-700 hover:to-indigo-700 transition">
+                    <span id="lockMcqBtnText">Sign In to Unlock</span>
+                </button>
+            </div>
+
+            <div id="content-mcq" class="space-y-3">
+                <div class="flex bg-slate-200/70 p-1 rounded-lg text-xs font-semibold text-slate-600 mb-3">
+                    <button onclick="switchMcqSubtab('formatting')" id="subtab-btn-formatting" class="flex-1 py-1.5 rounded-md bg-white text-blue-700 shadow-sm transition">
+                        <i class="fas fa-align-left mr-1"></i> Formatter
+                    </button>
+                    <button onclick="switchMcqSubtab('studio')" id="subtab-btn-studio" class="flex-1 py-1.5 rounded-md text-slate-600 hover:text-slate-900 transition">
+                        <i class="fas fa-cubes mr-1"></i> Q-Bank & Generator
+                    </button>
+                </div>
+
+                <!-- SUBTAB A: FORMATTING -->
+                <div id="mcq-subtab-formatting" class="subtab-content active space-y-3">
+                    <div class="bg-white p-3 rounded-lg shadow-sm border border-slate-200/80">
+                        <label class="flex items-center space-x-2 cursor-pointer">
+                            <input type="checkbox" id="shuffleCheck" class="form-checkbox h-4 w-4 text-blue-600 rounded border-gray-300 transition" checked>
+                            <span class="text-xs font-semibold text-slate-700">Shuffle Options (Randomize Pattern)</span>
+                        </label>
+                    </div>
+
+                    <div>
+                        <div class="flex space-x-2">
+                            <button id="btnNormal" class="w-full relative group bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-2.5 px-3 rounded-lg transition-all shadow-sm flex items-center justify-center text-xs">
+                                <i class="fas fa-align-left mr-2"></i> Format as Normal MCQ
+                            </button>
+                            <button onclick="toggleSettings('set-normal')" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3.5 rounded-lg transition text-xs"><i class="fas fa-cog"></i></button>
+                        </div>
+                        <div id="set-normal" class="hidden bg-slate-50 border border-slate-200 rounded-lg p-3 mt-2 space-y-2 text-xs">
+                            <!-- NEW: Marker Style Toggle -->
+                            <div>
+                                <label class="text-slate-600 font-semibold">Marker Style</label>
+                                <select id="norm-marker-style" class="w-full mt-1 p-1.5 border rounded bg-white text-slate-700 outline-none focus:ring-2 focus:ring-blue-400">
+                                    <option value="symbol">OMR & ProshnaP Symbols</option>
+                                    <option value="text">Standard Text (Same Font)</option>
+                                </select>
+                            </div>
+                            <div><label class="text-slate-600 font-semibold">Options Font Name</label>
+                                <input type="text" list="font-list" id="norm-opt-font" placeholder="Leave empty for BanglaOMR" class="w-full mt-1 p-1.5 border rounded bg-white text-slate-700 outline-none focus:ring-2 focus:ring-blue-400">
+                            </div>
+                            <div class="flex space-x-2">
+                                <div class="w-1/2"><label class="text-slate-600 font-semibold">Opt Font Size</label>
+                                    <input type="text" list="size-list" id="norm-opt-size" placeholder="Default: 9" class="w-full mt-1 p-1.5 border rounded bg-white text-slate-700 outline-none focus:ring-2 focus:ring-blue-400">
+                                </div>
+                                <div class="w-1/2"><label class="text-slate-600 font-semibold">Ans Font Size</label>
+                                    <input type="text" list="size-list" id="norm-ans-size" placeholder="Default: 10" class="w-full mt-1 p-1.5 border rounded bg-white text-slate-700 outline-none focus:ring-2 focus:ring-blue-400">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="flex space-x-2">
+                            <button id="btnSmart" class="w-full relative group bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-semibold py-2.5 px-3 rounded-lg transition-all shadow-sm flex items-center justify-center text-xs">
+                                <i class="fas fa-file-lines mr-2"></i> Format as Smart MCQ (Ans Page)
+                            </button>
+                            <button onclick="toggleSettings('set-smart')" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3.5 rounded-lg transition text-xs"><i class="fas fa-cog"></i></button>
+                        </div>
+                        <div id="set-smart" class="hidden bg-slate-50 border border-slate-200 rounded-lg p-3 mt-2 space-y-2 text-xs">
+                            <!-- NEW: Marker Style Toggle -->
+                            <div>
+                                <label class="text-slate-600 font-semibold">Marker Style</label>
+                                <select id="smart-marker-style" class="w-full mt-1 p-1.5 border rounded bg-white text-slate-700 outline-none focus:ring-2 focus:ring-emerald-400">
+                                    <option value="symbol">OMR & ProshnaP Symbols</option>
+                                    <option value="text">Standard Text (Same Font)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-slate-600 font-semibold">Answer Page Font Size</label>
+                                <input type="text" list="size-list" id="smart-ans-size" placeholder="Default: 10" class="w-full mt-1 p-1.5 border rounded bg-white text-slate-700 outline-none focus:ring-2 focus:ring-emerald-400">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="flex space-x-2">
+                            <button id="btnFormatQuestions" class="w-full bg-amber-500 hover:bg-amber-600 text-white font-semibold py-2.5 px-3 rounded-lg transition-all shadow-sm flex items-center justify-center text-xs">
+                                <i class="fas fa-list-ol mr-2"></i> Number & Bold Questions
+                            </button>
+                            <button onclick="toggleSettings('set-number')" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3.5 rounded-lg transition text-xs"><i class="fas fa-cog"></i></button>
+                        </div>
+                        <div id="set-number" class="hidden bg-slate-50 border border-slate-200 rounded-lg p-3 mt-2 text-xs">
+                            <label class="text-slate-600 font-semibold">Numbering Style</label>
+                            <select id="num-style" class="w-full mt-1 p-1.5 border rounded bg-white text-slate-700 outline-none focus:ring-2 focus:ring-amber-400">
+                                <option value="auto-arabic">1. 2. 3. (MS Word Auto List)</option>
+                                <option value="auto-alpha">a. b. c. (MS Word Auto List)</option>
+                                <option value="auto-roman">i. ii. iii. (MS Word Auto List)</option>
+                                <option value="bn-num">১. ২. ৩. (Bangla Text Numbering)</option>
+                                <option value="bn-alpha">ক. খ. গ. (Bangla Text Numbering)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SUBTAB B: STUDIO & QUESTION BANK -->
+                <div id="mcq-subtab-studio" class="subtab-content space-y-3">
+                    <div class="bg-white rounded-lg shadow-sm border border-slate-200/90 overflow-hidden">
+                        <div class="bg-slate-50 px-3 py-2 border-b border-slate-200 font-semibold text-xs text-slate-700 flex justify-between items-center cursor-pointer hover:bg-slate-100 transition" onclick="toggleSettings('studio-dup')">
+                            <span><i class="fas fa-clone text-rose-500 mr-1.5"></i> Duplicate Finder & Detector</span>
+                            <i class="fas fa-chevron-down text-slate-400 text-xs"></i>
+                        </div>
+                        <div id="studio-dup" class="hidden p-3 space-y-2.5">
+                            <div class="bg-slate-50 border border-slate-200 rounded-lg p-2.5">
+                                <div class="flex items-center justify-between mb-1.5">
+                                    <span class="text-[11px] font-bold text-slate-700">Detection Settings</span>
+                                    <button onclick="toggleSettings('duplicateSettings')" type="button" class="text-slate-500 hover:text-slate-800"><i class="fas fa-sliders-h text-xs"></i></button>
+                                </div>
+                                <div id="duplicateSettings" class="space-y-2">
+                                    <div>
+                                        <div class="flex items-center justify-between text-[11px]">
+                                            <span class="text-slate-600 font-semibold">Similarity Threshold</span>
+                                            <span id="duplicateThresholdValue" class="font-bold text-rose-600">85%</span>
+                                        </div>
+                                        <input id="duplicateThreshold" type="range" min="70" max="100" value="85" class="w-full accent-rose-600">
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-1.5 text-[10px] text-slate-600">
+                                        <label class="flex items-center gap-1"><input id="dupIgnoreNumbers" type="checkbox" checked> Ignore Q numbers</label>
+                                        <label class="flex items-center gap-1"><input id="dupIgnorePunctuation" type="checkbox" checked> Ignore punctuation</label>
+                                        <label class="flex items-center gap-1"><input id="dupIgnoreOptionOrder" type="checkbox" checked> Ignore opt order</label>
+                                        <label class="flex items-center gap-1"><input id="dupDetectConflicts" type="checkbox" checked> Detect conflicts</label>
+                                        <label class="flex items-center gap-1"><input id="dupProtectNumbers" type="checkbox" checked> Protect numbers</label>
+                                        <label class="flex items-center gap-1"><input id="dupCompareOptions" type="checkbox" checked> Compare options</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <button id="btnDuplicateFinder" class="w-full bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white font-semibold py-2 px-3 rounded-lg transition text-xs shadow-sm">
+                                Scan Document for Duplicates
+                            </button>
+                            <div id="duplicateSummary" class="hidden grid grid-cols-2 gap-1.5 mt-2">
+                                <div class="bg-red-50 border border-red-100 rounded p-1.5 text-center"><div id="dupExactCount" class="text-base font-extrabold text-red-600">0</div><div class="text-[9px] text-slate-600">Exact Groups</div></div>
+                                <div class="bg-orange-50 border border-orange-100 rounded p-1.5 text-center"><div id="dupPotentialCount" class="text-base font-extrabold text-orange-600">0</div><div class="text-[9px] text-slate-600">Potential Groups</div></div>
+                                <div class="bg-yellow-50 border border-yellow-100 rounded p-1.5 text-center"><div id="dupConflictCount" class="text-base font-extrabold text-yellow-700">0</div><div class="text-[9px] text-slate-600">Answer Conflicts</div></div>
+                                <div class="bg-blue-50 border border-blue-100 rounded p-1.5 text-center"><div id="dupQuestionCount" class="text-base font-extrabold text-blue-600">0</div><div class="text-[9px] text-slate-600">MCQs Scanned</div></div>
+                            </div>
+                            <div id="duplicateResults" class="space-y-1.5 max-h-56 overflow-y-auto pr-1"></div>
+                        </div>
+                    </div>
+
+                    <div class="border border-slate-200/90 rounded-lg bg-white overflow-hidden shadow-sm">
+                        <div class="bg-slate-50 px-3 py-2 border-b border-slate-200 font-semibold text-xs text-slate-700 flex justify-between items-center cursor-pointer hover:bg-slate-100 transition" onclick="toggleSettings('studio-bank')">
+                            <span><i class="fas fa-database text-emerald-600 mr-1.5"></i> Question Bank Manager</span>
+                            <i class="fas fa-chevron-down text-slate-400 text-xs"></i>
+                        </div>
+                        <div id="studio-bank" class="p-3 space-y-2 hidden">
+                            <div class="flex space-x-2">
+                                <button id="btnAddBank" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold py-2 px-2 rounded-lg shadow-sm transition"><i class="fas fa-plus mr-1"></i> Add Selected</button>
+                                <button id="btnManageBank" class="flex-1 bg-slate-700 hover:bg-slate-800 text-white text-xs font-semibold py-2 px-2 rounded-lg shadow-sm transition"><i class="fas fa-folder-open mr-1"></i> Open Bank</button>
+                            </div>
+                            <div class="flex justify-between items-center text-xs text-slate-500 px-1 pt-1">
+                                <span class="bg-slate-100 px-2 py-0.5 rounded border text-[11px]">Total Stored: <span id="bank-count" class="font-bold text-slate-800">0</span></span>
+                                <div class="space-x-3 flex items-center text-xs">
+                                    <input type="file" id="importBankFile" accept=".json" class="hidden">
+                                    <label for="importBankFile" class="cursor-pointer text-emerald-600 hover:text-emerald-800" title="Import JSON"><i class="fas fa-file-import"></i></label>
+                                    <button id="btnExportBank" class="text-blue-600 hover:text-blue-800" title="Export JSON"><i class="fas fa-file-export"></i></button>
+                                    <button id="btnClearBank" class="text-red-500 hover:text-red-700" title="Clear Bank"><i class="fas fa-trash-alt"></i></button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="border border-slate-200/90 rounded-lg bg-white overflow-hidden shadow-sm">
+                        <div class="bg-slate-50 px-3 py-2 border-b border-slate-200 font-semibold text-xs text-slate-700 flex justify-between items-center cursor-pointer hover:bg-slate-100 transition" onclick="toggleSettings('studio-set')">
+                            <span><i class="fas fa-cubes text-purple-600 mr-1.5"></i> Multi-Set Generator</span>
+                            <i class="fas fa-chevron-down text-slate-400 text-xs"></i>
+                        </div>
+                        <div id="studio-set" class="p-3 space-y-2 hidden text-xs">
+                            <div class="flex space-x-2">
+                                <div class="w-1/2">
+                                    <label class="text-slate-600 font-semibold">MCQ Count</label>
+                                    <input type="number" id="set-count" value="25" class="w-full mt-1 p-1.5 border rounded outline-none focus:ring-2 focus:ring-purple-400">
+                                </div>
+                                <div class="w-1/2">
+                                    <label class="text-slate-600 font-semibold">Start Num</label>
+                                    <input type="number" id="set-start" value="1" class="w-full mt-1 p-1.5 border rounded outline-none focus:ring-2 focus:ring-purple-400">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="text-slate-600 font-semibold">Number of Sets</label>
+                                <input type="number" id="set-number-of-sets" value="1" min="1" max="10" class="w-full mt-1 p-1.5 border rounded outline-none focus:ring-2 focus:ring-purple-400">
+                            </div>
+                            <!-- NEW: Marker Style Toggle -->
+                            <div class="mt-2">
+                                <label class="text-slate-600 font-semibold">Marker Style</label>
+                                <select id="set-marker-style" class="w-full mt-1 p-1.5 border rounded outline-none focus:ring-2 focus:ring-purple-400">
+                                    <option value="symbol">OMR & ProshnaP Symbols</option>
+                                    <option value="text">Standard Text (Same Font)</option>
+                                </select>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2 text-slate-600 mt-2">
+                                <label class="flex items-center"><input type="checkbox" id="set-shuffle-q" checked class="mr-1"> Random Select</label>
+                                <label class="flex items-center"><input type="checkbox" id="set-shuffle-o" checked class="mr-1"> Shuffle Opts</label>
+                            </div>
+                            <button id="btnGenerateSet" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-3 rounded-lg shadow-sm transition mt-1">Generate MCQ Set(s)</button>
+                        </div>
+                    </div>
+
+                    <div class="border border-slate-200/90 rounded-lg bg-white overflow-hidden shadow-sm">
+                        <div class="bg-slate-50 px-3 py-2 border-b border-slate-200 font-semibold text-xs text-slate-700 flex justify-between items-center cursor-pointer hover:bg-slate-100 transition" onclick="toggleSettings('studio-exam')">
+                            <span><i class="fas fa-graduation-cap text-orange-600 mr-1.5"></i> Exam Paper & Key Gen.</span>
+                            <i class="fas fa-chevron-down text-slate-400 text-xs"></i>
+                        </div>
+                        <div id="studio-exam" class="p-3 space-y-2 hidden text-xs">
+                            <div class="flex space-x-2">
+                                <div class="w-3/4">
+                                    <label class="text-slate-600 font-semibold">Exam Title / Header</label>
+                                    <input type="text" id="exam-title" placeholder="e.g., Model Test 2026" class="w-full mt-1 p-1.5 border rounded outline-none focus:ring-2 focus:ring-orange-400">
+                                </div>
+                                <div class="w-1/4">
+                                    <label class="text-slate-600 font-semibold">Sets</label>
+                                    <input type="number" id="exam-sets" value="1" min="1" max="10" class="w-full mt-1 p-1.5 border rounded outline-none focus:ring-2 focus:ring-orange-400 text-center">
+                                </div>
+                            </div>
+                            <!-- NEW: Marker Style Toggle -->
+                            <div class="mt-2">
+                                <label class="text-slate-600 font-semibold">Marker Style</label>
+                                <select id="exam-marker-style" class="w-full mt-1 p-1.5 border rounded outline-none focus:ring-2 focus:ring-orange-400">
+                                    <option value="symbol">OMR & ProshnaP Symbols</option>
+                                    <option value="text">Standard Text (Same Font)</option>
+                                </select>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2 text-slate-600 mt-2">
+                                <label class="flex items-center"><input type="checkbox" id="exam-shuffle" checked class="mr-1"> Shuffle Qs & Opts</label>
+                                <label class="flex items-center"><input type="checkbox" id="exam-ans-key" checked class="mr-1"> Answer Key Grid</label>
+                            </div>
+                            <button id="btnGenerateExam" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-semibold py-2 px-3 rounded-lg shadow-sm transition mt-1">Create Exam Paper</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- PRODUCT 2: FOLORIA CONVERTER -->
+        <section id="product-converter" class="product-pane">
+            <div class="space-y-3">
+                <div class="flex bg-slate-200/70 p-1 rounded-lg text-xs font-semibold text-slate-600 mb-3">
+                    <button onclick="switchConverterSubtab('smart-convert')" id="subtab-btn-smart-convert" class="flex-1 py-1.5 rounded-md bg-white text-indigo-700 shadow-sm transition">
+                        <i class="fas fa-exchange-alt mr-1"></i> Bijoy ⇄ Unicode
+                    </button>
+                    <button onclick="switchConverterSubtab('font-fixer')" id="subtab-btn-font-fixer" class="flex-1 py-1.5 rounded-md text-slate-600 hover:text-slate-900 transition">
+                        <i class="fas fa-font mr-1"></i> English Font Fixer
+                    </button>
+                </div>
+
+                <div id="converter-subtab-smart-convert" class="subtab-content active space-y-3">
+                    <div class="bg-indigo-50/70 border border-indigo-100 rounded-lg p-3 text-center text-xs">
+                        <i class="fas fa-language text-2xl text-indigo-600 mb-1"></i>
+                        <h3 class="font-bold text-slate-800">Smart Bijoy ⇄ Unicode</h3>
+                        <p class="text-[11px] text-slate-500 mt-0.5">Retains English formulas, numbering, and paragraph alignments intact.</p>
+                    </div>
+
+                    <div>
+                        <div class="flex space-x-2">
+                            <button id="btnUniToBijoy" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 px-3 rounded-lg shadow-sm transition flex items-center justify-center text-xs">
+                                Unicode <i class="fas fa-arrow-right mx-2.5 text-[10px]"></i> Bijoy
+                            </button>
+                            <button onclick="toggleSettings('set-u2b')" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3.5 rounded-lg transition text-xs"><i class="fas fa-cog"></i></button>
+                        </div>
+                        <div id="set-u2b" class="hidden bg-slate-50 border border-slate-200 rounded-lg p-3 mt-2 space-y-2 text-xs">
+                            <div class="flex space-x-2">
+                                <div class="w-2/3"><label class="text-slate-600 font-semibold">Target Font Name</label>
+                                    <input type="text" list="font-list" id="u2b-font" placeholder="Leave empty for SutonnyMJ" class="w-full mt-1 p-1.5 border rounded bg-white text-slate-700 outline-none focus:ring-2 focus:ring-indigo-400">
+                                </div>
+                                <div class="w-1/3"><label class="text-slate-600 font-semibold">Font Size</label>
+                                    <input type="text" list="size-list" id="u2b-size" placeholder="Keep Original" class="w-full mt-1 p-1.5 border rounded bg-white text-slate-700 outline-none focus:ring-2 focus:ring-indigo-400">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="flex space-x-2">
+                            <button id="btnBijoyToUni" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2.5 px-3 rounded-lg shadow-sm transition flex items-center justify-center text-xs">
+                                Bijoy <i class="fas fa-arrow-right mx-2.5 text-[10px]"></i> Unicode
+                            </button>
+                            <button onclick="toggleSettings('set-b2u')" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3.5 rounded-lg transition text-xs"><i class="fas fa-cog"></i></button>
+                        </div>
+                        <div id="set-b2u" class="hidden bg-slate-50 border border-slate-200 rounded-lg p-3 mt-2 space-y-2 text-xs">
+                            <div class="flex space-x-2">
+                                <div class="w-2/3"><label class="text-slate-600 font-semibold">Target Font Name</label>
+                                    <input type="text" list="font-list" id="b2u-font" placeholder="Leave empty for Kalpurush" class="w-full mt-1 p-1.5 border rounded bg-white text-slate-700 outline-none focus:ring-2 focus:ring-purple-400">
+                                </div>
+                                <div class="w-1/3"><label class="text-slate-600 font-semibold">Font Size</label>
+                                    <input type="text" list="size-list" id="b2u-size" placeholder="Keep Original" class="w-full mt-1 p-1.5 border rounded bg-white text-slate-700 outline-none focus:ring-2 focus:ring-purple-400">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="converter-subtab-font-fixer" class="subtab-content space-y-3">
+                    <div class="bg-cyan-50/70 border border-cyan-100 rounded-lg p-3 text-center text-xs">
+                        <i class="fas fa-font text-2xl text-cyan-600 mb-1"></i>
+                        <h3 class="font-bold text-slate-800">English Font Fixer</h3>
+                        <p class="text-[11px] text-slate-500 mt-0.5">Fixes mixed English letters, variables, and numbers to standard font without altering Bangla text.</p>
+                    </div>
+
+                    <div>
+                        <div class="flex space-x-2">
+                            <button id="btnFixEnglishFont" class="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-semibold py-2.5 px-3 rounded-lg shadow-sm transition flex items-center justify-center text-xs">
+                                <i class="fas fa-magic mr-2"></i> Fix English Fonts in Selection
+                            </button>
+                            <button onclick="toggleSettings('set-fixfont')" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3.5 rounded-lg transition text-xs"><i class="fas fa-cog"></i></button>
+                        </div>
+                        <div id="set-fixfont" class="hidden bg-slate-50 border border-slate-200 rounded-lg p-3 mt-2 space-y-2 text-xs">
+                            <div class="flex space-x-2">
+                                <div class="w-2/3"><label class="text-slate-600 font-semibold">Target Font Name</label>
+                                    <input type="text" list="font-list" id="fix-font" placeholder="Default: Times New Roman" class="w-full mt-1 p-1.5 border rounded bg-white text-slate-700 outline-none focus:ring-2 focus:ring-cyan-400">
+                                </div>
+                                <div class="w-1/3"><label class="text-slate-600 font-semibold">Font Size</label>
+                                    <input type="text" list="size-list" id="fix-size" placeholder="Keep Original" class="w-full mt-1 p-1.5 border rounded bg-white text-slate-700 outline-none focus:ring-2 focus:ring-cyan-400">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- PRODUCT 3: FOLORIA OCR STUDIO -->
+        <section id="product-ocr" class="product-pane">
+            <div id="lock-ocr" class="hidden bg-white/95 backdrop-blur-sm border border-slate-200 rounded-xl p-6 text-center shadow-lg my-6">
+                <div class="w-12 h-12 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-3 text-xl">
+                    <i class="fas fa-lock"></i>
+                </div>
+                <h3 class="text-sm font-bold text-slate-800">Foliora OCR Studio Locked</h3>
+                <p id="lockOcrReason" class="text-xs text-slate-500 mt-1 mb-4">You have reached your monthly OCR limit or need an active entitlement.</p>
+                <button onclick="handleLockAction('ocr')" class="w-full bg-gradient-to-r from-teal-600 to-emerald-600 text-white font-semibold py-2 px-4 rounded-lg text-xs shadow hover:from-teal-700 hover:to-emerald-700 transition">
+                    <span id="lockOcrBtnText">Adjust OCR Quota or Sign In</span>
+                </button>
+            </div>
+
+            <div id="content-ocr" class="space-y-3">
+                <div class="bg-gradient-to-r from-teal-900 to-slate-900 text-white p-3 rounded-lg shadow-sm">
+                    <div class="flex items-center justify-between text-xs">
+                        <span class="font-bold text-teal-300"><i class="fas fa-chart-pie mr-1"></i> Monthly Usage</span>
+                        <span id="ocrQuotaText" class="text-[11px] font-semibold bg-teal-800/80 px-2 py-0.5 rounded text-teal-100 border border-teal-600/40">0 / 10 pages used</span>
+                    </div>
+                    <div class="w-full bg-slate-700 h-1.5 rounded-full overflow-hidden mt-2">
+                        <div id="ocrQuotaBar" class="bg-teal-400 h-full rounded-full transition-all duration-300" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <div class="bg-white border border-slate-200 rounded-lg p-3 shadow-sm text-xs">
+                    <div class="flex justify-between items-center cursor-pointer" onclick="toggleSettings('api-key-settings')">
+                        <span class="font-bold text-slate-700"><i class="fas fa-key text-amber-500 mr-1.5"></i> Gemini AI Engine Key</span>
+                        <i class="fas fa-chevron-down text-slate-400 text-xs"></i>
+                    </div>
+                    <div id="api-key-settings" class="mt-2 hidden space-y-2">
+                        <input type="password" id="gemini-api-key" placeholder="Paste your free Gemini API Key" class="w-full p-2 border rounded text-xs focus:ring-2 focus:ring-teal-400 outline-none">
+                        <button id="btnSaveApiKey" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-semibold py-1.5 rounded transition shadow-sm">Save Key</button>
+                        <p class="text-[10px] text-slate-500 mt-1"><a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-teal-600 underline">Get free key from Google AI Studio</a></p>
+                    </div>
+                </div>
+
+                <div id="dropzone" class="border-2 border-dashed border-slate-300 hover:border-teal-500 rounded-lg p-4 text-center bg-slate-50 hover:bg-slate-100/80 transition cursor-pointer flex flex-col items-center justify-center min-h-[130px] relative">
+                    <input type="file" id="vision-file-input" accept="image/*" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+                    <i class="fas fa-cloud-arrow-up text-3xl text-teal-500 mb-2"></i>
+                    <span class="text-xs font-semibold text-slate-700">Click to upload or Drop image</span>
+                    <span class="text-[11px] font-bold text-teal-700 bg-teal-100/70 px-2 py-0.5 rounded mt-1.5">or paste directly with (Ctrl+V)</span>
+                </div>
+
+                <div id="vision-preview-container" class="hidden relative border rounded-lg bg-slate-100 p-2 text-center">
+                    <button id="btnRemoveImage" class="absolute top-2 right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center shadow hover:bg-red-600 z-10 transition"><i class="fas fa-times text-xs"></i></button>
+                    <img id="vision-preview" class="w-full max-h-44 object-contain rounded" src="" alt="Preview">
+                </div>
+
+                <button id="btnExtractText" class="w-full bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white text-xs font-semibold py-3 rounded-lg shadow-sm transition flex items-center justify-center opacity-50 cursor-not-allowed" disabled>
+                    <i class="fas fa-wand-magic-sparkles mr-2"></i> Extract & Reconstruct into Word
+                </button>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- MODAL 1: AUTHENTICATION (SUPABASE LIVE AUTH) -->
+    <div id="modalAuth" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-[fadeIn_0.15s_ease-out]">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm border border-slate-200 overflow-hidden">
+            <div class="bg-slate-900 text-white px-4 py-3 flex items-center justify-between">
+                <div class="flex items-center space-x-2">
+                    <div class="w-5 h-5 rounded bg-indigo-500 flex items-center justify-center text-[10px] font-black text-white">F</div>
+                    <h3 class="text-xs font-bold uppercase tracking-wider">Foliora Account</h3>
+                </div>
+                <button onclick="closeAuthModal()" class="text-slate-400 hover:text-white"><i class="fas fa-times"></i></button>
+            </div>
+
+            <div class="flex border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-500">
+                <button onclick="switchAuthTab('signin')" id="authTabSignIn" class="flex-1 py-2.5 text-center text-indigo-600 border-b-2 border-indigo-600 bg-white transition">
+                    Sign In
+                </button>
+                <button onclick="switchAuthTab('signup')" id="authTabSignUp" class="flex-1 py-2.5 text-center hover:text-slate-800 transition">
+                    Create Account
+                </button>
+            </div>
+
+            <div class="p-4 space-y-3.5 text-xs">
+                <!-- Sign In Form -->
+                <form id="formSignIn" onsubmit="handleLiveSignIn(event)" class="space-y-3">
+                    <div>
+                        <label class="font-bold text-slate-700 block mb-1">Email Address</label>
+                        <input type="email" id="authSignInEmail" required placeholder="you@example.com" class="w-full p-2 border rounded-lg bg-slate-50 text-xs outline-none focus:ring-2 focus:ring-indigo-400">
+                    </div>
+                    <div>
+                        <label class="font-bold text-slate-700 block mb-1">Password</label>
+                        <input type="password" id="authSignInPassword" required placeholder="••••••••" class="w-full p-2 border rounded-lg bg-slate-50 text-xs outline-none focus:ring-2 focus:ring-indigo-400">
+                    </div>
+                    <button type="submit" id="btnSubmitSignIn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-lg shadow-sm transition mt-1">
+                        Sign In to Foliora
+                    </button>
+                </form>
+
+                <!-- Sign Up Form -->
+                <form id="formSignUp" onsubmit="handleLiveSignUp(event)" class="space-y-3 hidden">
+                    <div>
+                        <label class="font-bold text-slate-700 block mb-1">Full Name</label>
+                        <input type="text" id="authSignUpName" required placeholder="Your Name" class="w-full p-2 border rounded-lg bg-slate-50 text-xs outline-none focus:ring-2 focus:ring-indigo-400">
+                    </div>
+                    <div>
+                        <label class="font-bold text-slate-700 block mb-1">Email Address</label>
+                        <input type="email" id="authSignUpEmail" required placeholder="you@example.com" class="w-full p-2 border rounded-lg bg-slate-50 text-xs outline-none focus:ring-2 focus:ring-indigo-400">
+                    </div>
+                    <div>
+                        <label class="font-bold text-slate-700 block mb-1">Password</label>
+                        <input type="password" id="authSignUpPassword" required minlength="6" placeholder="At least 6 characters" class="w-full p-2 border rounded-lg bg-slate-50 text-xs outline-none focus:ring-2 focus:ring-indigo-400">
+                    </div>
+                    <button type="submit" id="btnSubmitSignUp" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded-lg shadow-sm transition mt-1">
+                        Create Foliora Account
+                    </button>
+                </form>
+
+                <div class="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+                    <span>Converter is always free.</span>
+                    <button type="button" onclick="continueAsGuest()" class="text-indigo-600 font-semibold hover:underline">
+                        Continue as Guest &rarr;
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 2: USER PROFILE & SUBSCRIPTION (MY FOLIORA) -->
+    <div id="modalProfile" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-[fadeIn_0.15s_ease-out]">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm border border-slate-200 overflow-hidden">
+            <div class="bg-slate-900 text-white px-4 py-3.5 flex items-center justify-between">
+                <div class="flex items-center space-x-2">
+                    <i class="fas fa-user-circle text-indigo-400 text-base"></i>
+                    <h3 class="text-xs font-bold uppercase tracking-wider">My Foliora</h3>
+                </div>
+                <button onclick="closeProfileModal()" class="text-slate-400 hover:text-white"><i class="fas fa-times"></i></button>
+            </div>
+
+            <div class="p-4 space-y-3.5 text-xs">
+                <div class="flex items-center space-x-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                    <div id="profileAvatarBig" class="w-10 h-10 rounded-full bg-gradient-to-tr from-indigo-600 to-blue-500 text-white text-base font-bold flex items-center justify-center shadow-sm">
+                        U
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div id="profileNameDisplay" class="font-bold text-slate-800 text-sm truncate">User Name</div>
+                        <div id="profileEmailDisplay" class="text-slate-500 text-[11px] truncate">user@foliora.com</div>
+                    </div>
+                </div>
+
+                <div class="space-y-2">
+                    <div class="flex justify-between items-center">
+                        <span class="font-bold text-slate-700 text-[11px] uppercase tracking-wider">Live Entitlements</span>
+                        <button onclick="refreshLiveEntitlements(true)" title="Refresh from server" class="text-indigo-600 hover:text-indigo-800 text-[11px]">
+                            <i class="fas fa-rotate-right mr-1"></i>Sync
+                        </button>
+                    </div>
+                    
+                    <div class="space-y-1.5">
+                        <div class="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-200">
+                            <span class="font-medium text-slate-700 flex items-center gap-1.5">
+                                <i class="fas fa-list-check text-blue-600"></i> MCQ Studio
+                            </span>
+                            <span id="profileBadgeMcq" class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">Pro Active</span>
+                        </div>
+
+                        <div class="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-200">
+                            <span class="font-medium text-slate-700 flex items-center gap-1.5">
+                                <i class="fas fa-language text-indigo-600"></i> Converter
+                            </span>
+                            <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800">Free Lifetime</span>
+                        </div>
+
+                        <div class="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-200">
+                            <span class="font-medium text-slate-700 flex items-center gap-1.5">
+                                <i class="fas fa-eye text-teal-600"></i> OCR Studio
+                            </span>
+                            <span id="profileBadgeOcr" class="text-[10px] font-bold px-2 py-0.5 rounded bg-teal-100 text-teal-800">10 pgs/mo (Trial)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pt-2 flex flex-col gap-2">
+                    <button onclick="handleLiveSignOut()" class="w-full bg-red-50 hover:bg-red-100 text-red-600 font-semibold py-2 rounded-lg transition text-xs border border-red-200 flex items-center justify-center gap-1.5">
+                        <i class="fas fa-right-from-bracket"></i> Sign Out
+                    </button>
+                    <button onclick="closeProfileModal()" class="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-1.5 rounded-lg transition text-xs">
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 3: WORKSPACE CUSTOMIZER -->
+    <div id="modalWorkspace" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-[fadeIn_0.15s_ease-out]">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-xs border border-slate-200 overflow-hidden">
+            <div class="bg-slate-900 text-white px-4 py-3 flex items-center justify-between">
+                <div class="flex items-center space-x-2">
+                    <i class="fas fa-sliders-h text-indigo-400"></i>
+                    <h3 class="text-xs font-bold uppercase tracking-wider">Customize Workspace</h3>
+                </div>
+                <button onclick="closeWorkspaceModal()" class="text-slate-400 hover:text-white"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="p-4 space-y-3 text-xs">
+                <p class="text-slate-500 text-[11px]">Select which Foliora tools to display in your navigation bar. Hiding a tool does not cancel your subscription.</p>
+                <div class="space-y-2 pt-1">
+                    <label class="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-200 cursor-pointer">
+                        <span class="font-semibold text-slate-700"><i class="fas fa-list-check text-blue-600 mr-2"></i> MCQ Studio</span>
+                        <input type="checkbox" id="wsCheckMcq" class="form-checkbox h-4 w-4 text-indigo-600 rounded">
+                    </label>
+                    <label class="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-200 cursor-pointer">
+                        <span class="font-semibold text-slate-700"><i class="fas fa-language text-indigo-600 mr-2"></i> Converter</span>
+                        <input type="checkbox" id="wsCheckConverter" class="form-checkbox h-4 w-4 text-indigo-600 rounded">
+                    </label>
+                    <label class="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-200 cursor-pointer">
+                        <span class="font-semibold text-slate-700"><i class="fas fa-eye text-teal-600 mr-2"></i> OCR Studio</span>
+                        <input type="checkbox" id="wsCheckOcr" class="form-checkbox h-4 w-4 text-indigo-600 rounded">
+                    </label>
+                </div>
+                <button onclick="saveWorkspaceSettings()" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold py-2 rounded-lg transition text-xs mt-2">
+                    Save Workspace
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 4: SUPABASE CREDENTIALS & DEV SIMULATOR -->
+    <div id="modalEntitlement" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-[fadeIn_0.15s_ease-out]">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm border border-slate-200 overflow-hidden max-h-[90vh] flex flex-col">
+            <div class="bg-slate-900 text-white px-4 py-3 flex items-center justify-between shrink-0">
+                <div class="flex items-center space-x-2">
+                    <i class="fas fa-database text-emerald-400"></i>
+                    <h3 class="text-xs font-bold uppercase tracking-wider">Backend API & Tiers</h3>
+                </div>
+                <button onclick="closeEntitlementModal()" class="text-slate-400 hover:text-white"><i class="fas fa-times"></i></button>
+            </div>
+            
+            <div class="p-4 space-y-3.5 text-xs overflow-y-auto">
+                <!-- Supabase Connection Config -->
+                <div class="bg-emerald-50/70 border border-emerald-200 rounded-lg p-3 space-y-2">
+                    <span class="font-bold text-emerald-900 block text-[11px] uppercase tracking-wider">
+                        <i class="fas fa-link mr-1"></i> Supabase Connection
+                    </span>
+                    <div>
+                        <label class="text-slate-600 text-[10px] font-semibold">Project URL</label>
+                        <input type="text" id="supabaseUrlInput" placeholder="https://xyz.supabase.co" class="w-full p-1.5 border rounded bg-white text-xs outline-none focus:ring-1 focus:ring-emerald-500">
+                    </div>
+                    <div>
+                        <label class="text-slate-600 text-[10px] font-semibold">Anon / Public Key</label>
+                        <input type="password" id="supabaseAnonKeyInput" placeholder="eyJhbGciOi..." class="w-full p-1.5 border rounded bg-white text-xs outline-none focus:ring-1 focus:ring-emerald-500">
+                    </div>
+                    <button onclick="saveSupabaseConfig()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-1.5 rounded transition text-xs shadow-sm">
+                        Connect Supabase
+                    </button>
+                </div>
+
+                <!-- Dev Simulator Fallback -->
+                <div class="space-y-2 border-t border-slate-200 pt-2">
+                    <span class="font-bold text-slate-700 block text-[11px] uppercase tracking-wider">Local Simulator Override</span>
+                    <div>
+                        <label class="font-bold text-slate-700 block mb-1">MCQ Studio Tier</label>
+                        <select id="simMcqTier" class="w-full p-1.5 border rounded-lg bg-slate-50 text-xs font-semibold outline-none focus:ring-2 focus:ring-indigo-400">
+                            <option value="pro">Pro (Unlocked)</option>
+                            <option value="locked">Locked</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="font-bold text-slate-700 block mb-1">OCR Studio Quota Override</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <select id="simOcrTier" class="w-full p-1.5 border rounded-lg bg-slate-50 text-xs font-semibold outline-none focus:ring-2 focus:ring-indigo-400">
+                                <option value="free">Free Trial (10 pgs)</option>
+                                <option value="pro">Pro (500 pgs)</option>
+                                <option value="locked">Locked (0 Left)</option>
+                            </select>
+                            <input type="number" id="simOcrUsed" value="0" min="0" placeholder="Used pgs" class="w-full p-1.5 border rounded-lg bg-slate-50 text-xs outline-none focus:ring-2 focus:ring-indigo-400">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pt-1 flex gap-2">
+                    <button onclick="applyEntitlementSimulation()" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 rounded-lg transition">Apply Simulator</button>
+                    <button onclick="closeEntitlementModal()" class="px-3 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg transition font-medium">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- NOTIFICATION TOAST -->
+    <div id="toast" class="fixed bottom-4 left-4 right-4 bg-slate-900 text-white px-4 py-3 rounded-lg shadow-xl flex items-center justify-between z-50 pointer-events-none">
+        <div class="flex items-center">
+            <i id="toastIcon" class="fas fa-check-circle text-green-400 mr-2.5 text-base"></i>
+            <span id="toastMsg" class="text-xs font-medium">Task completed successfully!</span>
+        </div>
+    </div>
+
+    <!-- EXTERNAL JS LOGIC -->
+    <script src="app.js"></script>
+
+</body>
+</html>

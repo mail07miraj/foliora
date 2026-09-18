@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<OfficeApp xsi:type="TaskPaneApp" xmlns="http://schemas.microsoft.com/office/appforoffice/1.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bt="http://schemas.microsoft.com/office/appforoffice/1.0/bt" xmlns:ov="http://schemas.microsoft.com/office/appforoffice/1.0/addinhost">
+  <Id>12345678-abcd-ef01-2345-6789abcdef01</Id>
+  <Version>1.0.0.0</Version>
+  <ProviderName>Testing</ProviderName>
+  <DefaultLocale>en-US</DefaultLocale>
+  <DisplayName DefaultValue="MCQ Formater" />
+  <Description DefaultValue="Formats and randomizes Bangla MCQs directly inside Microsoft Word." />
+  <IconUrl DefaultValue="https://appsforoffice.microsoft.com/lib/1/hosted/images/office_16x16.png" />
+  <SupportUrl DefaultValue="http://10.10.10.175:5500/taskpane.html" />
+  <Hosts>
+    <Host Name="Document" />
+  </Hosts>
+  <Requirements>
+    <Sets>
+      <Set Name="WordAddIn" MinVersion="1.1" />
+    </Sets>
+  </Requirements>
+  <DefaultSettings>
+    <SourceLocation DefaultValue="http://10.10.10.175:5500/taskpane.html" />
+  </DefaultSettings>
+  <Permissions>ReadWriteDocument</Permissions>
+</OfficeApp>
