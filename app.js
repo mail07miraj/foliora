@@ -989,6 +989,97 @@ function convertBijoyToUnicode(text) {
 
 
 
+// ============================================================================
+// CONVERTER ACTION HANDLER
+// ============================================================================
+async function runSmartConverter(direction) {
+    try {
+        await Word.run(async (context) => {
+            const selection = context.document.getSelection();
+            selection.load("text, font/bold, font/italic, font/size");
+            const paras = selection.paragraphs;
+            paras.load("items");
+            await context.sync();
+            
+            const rawText = selection.text;
+            if (!rawText || !rawText.trim()) { showStatus("Select text to convert!", true); return; }
+
+            let origAlign = "Left";
+            if (paras.items.length > 0) {
+                paras.items[0].load("alignment");
+                await context.sync();
+                origAlign = paras.items[0].alignment || "Left";
+            }
+            
+            let origBold = selection.font.bold === true;
+            let origItalic = selection.font.italic === true;
+            let origSize = selection.font.size || 10.5;
+
+            let targetDirection = direction;
+            let prefix = targetDirection === "UniToBijoy" ? "u2b" : "b2u";
+            let customFontName = document.getElementById(`${prefix}-font`).value.trim();
+            let customFontSize = document.getElementById(`${prefix}-size`).value.trim();
+            
+            let defaultFont = targetDirection === "UniToBijoy" ? "SutonnyMJ" : "Kalpurush";
+            let finalFontName = customFontName !== "" ? customFontName : defaultFont;
+            let finalFontSize = customFontSize !== "" ? parseFloat(customFontSize) : origSize;
+
+            let cursor = selection.insertText("", "Replace");
+            
+            cursor.paragraphs.load("items");
+            await context.sync();
+            if (cursor.paragraphs.items.length > 0) {
+                cursor.paragraphs.items[0].alignment = origAlign;
+            }
+
+            if (targetDirection === "UniToBijoy") {
+                let chunkRegex = /([ \t\r\n\v\(\)\[\]\{\}\'\"‘“’”\.\,\:\;\!\?\-\/\$\%\+\=\<\>°_@#&\*\\a-zA-Z0-9]+)/g;
+                let textChunks = rawText.split(chunkRegex);
+
+                for (let i = 0; i < textChunks.length; i++) {
+                    let chunk = textChunks[i];
+                    if (!chunk) continue;
+                    
+                    let rng = cursor.insertText(/[a-zA-Z0-9]/.test(chunk) ? chunk : convertUnicodeToBijoy(chunk), "Before");
+                    if (/[^\s]/.test(chunk)) { rng.font.name = /[a-zA-Z0-9]/.test(chunk) ? "Times New Roman" : finalFontName; }
+                    rng.font.size = finalFontSize; rng.font.bold = origBold; rng.font.italic = origItalic;
+                }
+            } else {
+                let protectedEng = [];
+                let protectRegex = /(\([A-Za-z0-9\s\-\.\_]+\)|\[[A-Za-z0-9\s\-\.\_]+\]|"[A-Za-z0-9\s\-\.\_]+"|'[A-Za-z0-9\s\-\.\_]+')/g;
+                let safeText = rawText.replace(protectRegex, function(match) { protectedEng.push(match); return "▲" + (protectedEng.length - 1) + "▲"; });
+
+                let converted = convertBijoyToUnicode(safeText);
+                let chunkRegex = /([ \t\r\n\v\(\)\[\]\{\}\'\"‘“’”\.\,\:\;\!\?\-\/\$\%\+\=\<\>°_@#&\*\\]+)/g;
+                let textChunks = converted.split(/(▲\d+▲)/g);
+
+                for (let i = 0; i < textChunks.length; i++) {
+                    let chunk = textChunks[i];
+                    if (!chunk) continue;
+                    
+                    let match = chunk.match(/^▲(\d+)▲$/);
+                    if (match) {
+                        let engText = protectedEng[parseInt(match[1])];
+                        let rng = cursor.insertText(engText, "Before");
+                        rng.font.name = "Times New Roman"; rng.font.size = finalFontSize; rng.font.bold = origBold; rng.font.italic = origItalic;
+                    } else {
+                        let subChunks = chunk.split(chunkRegex);
+                        for (let j = 0; j < subChunks.length; j++) {
+                            let subChunk = subChunks[j];
+                            if (!subChunk) continue;
+                            let rng = cursor.insertText(subChunk, "Before");
+                            if (/[^\s]/.test(subChunk)) { rng.font.name = finalFontName; }
+                            rng.font.size = finalFontSize; rng.font.bold = origBold; rng.font.italic = origItalic;
+                        }
+                    }
+                }
+            }
+            await context.sync(); showStatus(`Text Converted smoothly!`);
+        });
+    } catch (error) { showStatus("Error: " + (error.message || "Unknown"), true); }
+}
+
+
 // ==========================================
 // DUPLICATE FINDER LOGIC
 // ==========================================
