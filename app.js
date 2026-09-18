@@ -1169,11 +1169,13 @@ function convertBijoyToUnicode(text) {
 
         "²": "ক্ষ্ম",
         "¶g": "ক্ষ্ম",
+        "µ": "ক্র",
         "¶¨": "ক্ষ্য",
         "¶z": "ক্ষু",
         "¶": "ক্ষ",
 
         "k¥": "শ্ম",
+        "›`": "ন্দ",
         "›`ª": "ন্দ্র",
         "›`«": "ন্দ্র",
         "™¢": "দ্ভ",
@@ -1349,7 +1351,11 @@ function convertBijoyToUnicode(text) {
         "nŸ": "হ্ব",
         "n«": "হ্র",
         "n¨": "হ্য",
-        "n&j": "হ্ল"
+        "n&j": "হ্ল",
+
+        // Standalone legacy Bijoy symbols that also occur in valid text.
+        "‚": "ূ",
+        "¨": "্য"
     };
 
     const keys = Object.keys(b2uJukta)
