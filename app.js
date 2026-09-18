@@ -611,474 +611,226 @@ function getStandardAnswerMarker(answer, isUnicode) {
 
 
 function convertUnicodeToBijoy(text) {
-    if (!text) return "";
+            if (!text) return "";
+            let str = text;
+            str = str.replace(/\u09AF\u09BC/g, 'য়').replace(/\u09A1\u09BC/g, 'ড়').replace(/\u09A2\u09BC/g, 'ঢ়');
+            str = str.replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/ো/g, 'ো').replace(/ৌ/g, 'ৌ');
+            let cons = "কখগঘঙচছজঝঞটঠডঢণতথদধনপফবভমযরলশষসহড়ঢ়য়ৎংঃঁ"; 
+            str = str.replace(new RegExp("র\u09CD([" + cons + "](?:\u09CD[" + cons + "])*)", "g"), "$1©");
+            str = str.replace(new RegExp("([" + cons + "](?:\u09CD[" + cons + "])*(?:©)?)(ি|ে|ৈ)", "g"), "$2$1");
+            str = str.replace(/(^|[\s\(\[\{'"‘“\-])ে/g, "$1†").replace(/ে/g, "‡");
+            const u2bJukta = {
+                'ন্ট':'›U', 'প্ট':'Þ', 'ষ্ক':'®‹', 'ল্ক':'é', 'ল্গ':'ê', 'ল্ড':'ì', 'শ্চ':'ð', 'স্কৃ':'¯‹…',
+                'গ্ব':'M¦', 'ভু':'fz', 'খ্ব':'L¡', 'ক্ক':'°', 'ক্ট':'±', 'ক্ত':'³', 'ক্ব':'K¡', 'ক্স':'·', 'ক্ষ':'¶', 'ক্ষ্ম':'¶g', 'ক্ষ্য':'¶¨', 'ক্ষু':'¶z',
+                'জ্ঞ':'Á', 'ঙ্ক':'¼', 'ঙ্খ':'¼L', 'ঙ্গ':'½', 'ঙ্ঘ':'½N', 'ট্ট':'Æ', 'ঠ্ঠ':'V&V', 'ড্ড':'Ç', 'ণ্ট':'È', 'ণ্ঠ':'É', 'ণ্ড':'Û', 'ন্ড':'Û',
+                'ত্ত':'Ë', 'ত্থ':'Ì', 'ত্র':'Î', 'দ্দ':'Ï', 'দ্ধ':'×', 'দ্ব':'Ø', 'দ্ম':'Ù', 'ন্দ':'›`', 'ন্ধ':'Ü', 'ন্ন':'bœ', 'ন্ব':'b¦', 'ন্ম':'b¥', 'ন্দ্র':'›`«', 'দ্র':'`ª',
+                'ম্প':'¤ú', 'ম্ব':'¤^', 'ম্ম':'¤§', 'ম্ভ':'¤¢', 'ন্স':'Ý', 'ত্ম':'Z¥', 'ত্ন':'Zœ', 'ত্ম্য':'Z¥¨', 'স্ট':'÷', 'ষ্ট':'ó', 'ষ্ঠ':'ô', 'ষ্ণ':'ò', 'ষ্প':'®ú', 'ষ্ফ':'®ù', 'ষ্ম':'®§',
+                'স্ক':'¯‹', 'স্খ':'¯Œ', 'স্থ':'¯’', 'স্ন':'mœ', 'স্প':'¯ú', 'স্ফ':'ù', 'স্ম':'¯§', 'স্ব':'¯^', 'স্ত':'¯Í', 'স্স':'m&m',
+                'হ্ম':'þ', 'হু':'û', 'হৃ':'ü', 'হ্ন':'ý', 'হ্ব':'nŸ', 'প্ত':'ß', 'ব্দ':'ã', 'ব্ধ':'ä', 'ব্ব':'e&e', 'ব্জ':'e&R',
+                'শ্র':'kÖ', 'ক্র':'µ', 'গ্র':'MÖ', 'প্র':'cÖ', 'ড্র':'W«', 'ট্র':'U«', 'ফ্র':'d«', 'ব্র':'eª',
+                'ব্ল':'eø', 'ক্ল':'K¬', 'গ্ল':'Mø', 'প্ল':'cø', 'ফ্ল':'d¬', 'ম্ল':'gø', 'শ্ল':'kø', 'স্ল':'mø', 'হ্ল':'n&j',
+                'ঞ্চ':'Â', 'ঞ্ছ':'Ã', 'ঞ্জ':'Ä', 'রু':'iæ', 'রূ':'i~', 'শু':'ï', 'গু':'¸', 'ন্তু':'š‘', 'স্তু':'¯‘',
+                'চ্চ':'”P', 'চ্ছ':'”Q', 'জ্জ':'¾', 'ঝ্ঝ':'S&S', 'দ্ঘ':'`&N', 'ন্ত':'šÍ', 'ন্থ':'š’', 'ল্প':'í', 'ল্ব':'j&e', 'ল্ম':'j&g', 'ল্ল':'jø', 'ল্ফ':'j&d',
+                'ধ্ব':'aŸ', 'শ্ব':'k¦', 'ত্ব':'Z¡', 'থ্ব':'_¡', 'ম্ন':'gœ', 'শ্ম':'k&g', 'দ্য':'`¨', 'ন্ত্র':'š¿', 'ম্প্র':'¤cÖ', 'স্থ্য':'¯’¨', 'ষ্ট্র':'ó«', 
+                'শ্ন':'kœ', 'ব্য':'e¨', 'স্ত্র':'¯¿', 'ত্ত্ব':'Ë¡', 'ন্দ্ব':'›Ø', 'প্ন':'cœ', 'ত্য':'Z¨', 'স্ক্র':'¯‹«', 'স্ট্র':'÷«', 'থ্র':'_«', 'প্প':'c&c', 'প্স':'c&m',
+                'ঙ্ক্ষ':'¼¶', 'ঙ্ম':'O&g', 'গ্ধ':'\xBB', '্য':'¨', '্র':'«', '্':'&',
+                'কু':'Kz', 'কূ':'K‚', 'চু':'Pz', 'চূ':'P‚', 'ঝু':'Sz', 'ঝূ':'S‚', 'তু':'Zz', 'তূ':'Z‚', 'ভূ':'f‚', 'কৃ':'K…', 'তৃ':'Z…',
+                'ত্যু':'Zz¨', 'প্যু':'cz¨', 'ফ্যু':'dz¨', 'ভ্যু':'fz¨', 'হ্যু':'n~¨', 'ক্যু':'Ky¨', 'গ্যু':'My¨', 'চ্যু':'Py¨', 'জ্যু':'Ry¨', 'ড্যু':'Wy¨', 'দ্যু':'`y¨', 'ধ্যু':'ay¨', 'ব্যু':'ey¨', 'ল্যু':'jy¨', 'শ্যু':'k~¨', 'ত্যূ':'Z‚¨'
+            };
+            let keys = Object.keys(u2bJukta).sort((a, b) => b.length - a.length);
+            for (let k of keys) { str = str.split(k).join(u2bJukta[k]); }
 
-    let str = String(text)
-        .replace(/[\u200B-\u200D\uFEFF]/g, "")
-        .replace(/ড়/g, "ড়")
-        .replace(/ঢ়/g, "ঢ়")
-        .replace(/য়/g, "য়");
-
-    str = str.replace(/ো/g, "ো").replace(/ৌ/g, "ৌ");
-
-    const isPreKar = ch => ch === "ি" || ch === "ৈ" || ch === "ে";
-    const isPostKar = ch =>
-        ch === "া" || ch === "ো" || ch === "ৌ" || ch === "ৗ" ||
-        ch === "ু" || ch === "ূ" || ch === "ী" || ch === "ৃ";
-    const isKar = ch => isPreKar(ch) || isPostKar(ch);
-    const isBanjon = ch =>
-        "কখগঘঙচছজঝঞটঠডঢণতথদধনপফবভমযরলশষসহড়ঢ়য়ৎংঃঁ".includes(ch);
-    const isHalant = ch => ch === "্";
-
-    function rearrangeUnicodeForBijoy(value) {
-        let barrier = 0;
-
-        for (let i = 0; i < value.length; i++) {
-            if (isPreKar(value.charAt(i))) {
-                let j = 1;
-                while (true) {
-                    const prev = i - j;
-                    if (prev < 0 || prev <= barrier) break;
-
-                    if (
-                        isBanjon(value.charAt(prev)) &&
-                        isHalant(value.charAt(prev - 1))
-                    ) {
-                        j += 2;
-                    } else {
-                        break;
-                    }
-                }
-
-                value =
-                    value.substring(0, i - j) +
-                    value.charAt(i) +
-                    value.substring(i - j, i) +
-                    value.substring(i + 1);
-
-                barrier = i + 1;
-                continue;
-            }
-
-            if (
-                i < value.length - 1 &&
-                isHalant(value.charAt(i)) &&
-                value.charAt(i - 1) === "র" &&
-                value.charAt(i - 2) !== "্"
-            ) {
-                let j = 1;
-                let foundPreKar = 0;
-
-                while (true) {
-                    if (
-                        isBanjon(value.charAt(i + j)) &&
-                        isHalant(value.charAt(i + j + 1))
-                    ) {
-                        j += 2;
-                    } else if (
-                        isBanjon(value.charAt(i + j)) &&
-                        isPreKar(value.charAt(i + j + 1))
-                    ) {
-                        foundPreKar = 1;
-                        break;
-                    } else {
-                        break;
-                    }
-                }
-
-                value =
-                    value.substring(0, i - 1) +
-                    value.substring(i + j + 1, i + j + foundPreKar + 1) +
-                    value.substring(i + 1, i + j + 1) +
-                    value.charAt(i - 1) +
-                    value.charAt(i) +
-                    value.substring(i + j + foundPreKar + 1);
-
-                i += j + foundPreKar;
-                barrier = i + 1;
-            }
+            const map = {
+                'অ':'A', 'আ':'Av', 'ই':'B', 'ঈ':'C', 'উ':'D', 'ঊ':'E', 'ঋ':'F', 'এ':'G', 'ঐ':'H', 'ও':'I', 'ঔ':'J', 'ক':'K', 'খ':'L', 'গ':'M', 'ঘ':'N', 'ঙ':'O', 'চ':'P', 'ছ':'Q', 'জ':'R', 'ঝ':'S', 'ঞ':'T', 'ট':'U', 'ঠ':'V', 'ড':'W', 'ঢ':'X', 'ণ':'Y', 'ত':'Z', 'থ':'_', 'দ':'`', 'ধ':'a', 'ন':'b', 'প':'c', 'ফ':'d', 'ব':'e', 'ভ':'f', 'ম':'g', 'য':'h', 'র':'i', 'ল':'j', 'শ':'k', 'ষ':'l', 'স':'m', 'হ':'n', 'ড়':'o', 'ঢ়':'p', 'য়':'q', 'ৎ':'r', 'ং':'s', 'ঃ':'t', 'ঁ':'u', 'া':'v', 'ি':'w', 'ী':'x', 'ু':'y', 'ূ':'~', 'ৃ':'„', 'ে':'‡', 'ৈ':'ˆ', 'ৗ':'Š', '।':'|', '০':'0', '১':'1', '২':'2', '৩':'3', '৪':'4', '৫':'5', '৬':'6', '৭':'৭', '৮':'8', '৯':'9', '©':'©' 
+            };
+            let out = "";
+            for (let i = 0; i < str.length; i++) { out += map[str[i]] || str[i]; }
+            return out;
         }
-
-        return value;
-    }
-
-    str = rearrangeUnicodeForBijoy(str);
-
-    str = str
-        .replace(/।/g, "|")
-        .replace(/‘/g, "Ô")
-        .replace(/’/g, "Õ")
-        .replace(/“/g, "Ò")
-        .replace(/”/g, "Ó");
-
-    const u2b = {
-        "্র্য": "ª¨", "র‌্য": "i¨",
-        "ক্ষ্ম্য": "²¨", "ক্ষ্ম": "²", "ক্ষ্য": "¶¨", "ক্ষু": "¶z", "ক্ষূ": "¶‚", "ক্ষ": "¶",
-
-        "ক্ক": "°", "ক্ট": "±", "ক্ত্র": "³«", "ক্ত": "³", "ক্ব": "K¡",
-        "ক্ন": "K&b", "ক্ম": "K&g", "ক্যু": "Ky¨", "ক্য": "K¨", "ক্র": "µ", "ক্ল": "K¬", "কু": "Kz",
-        "খ্ব": "L¡", "খ্র": "L«", "খ্যু": "Ly¨", "খ্য": "L¨", "খু": "Lz",
-
-        "গ্ধ": "»", "গ্ন": "Mœ", "গ্ম": "M¥", "গ্ব": "M¦", "গ্যু": "My¨", "গ্য": "M¨",
-        "গ্রু": "Mªy", "গ্রূ": "Mª~", "গ্র": "MÖ", "গ্ল": "M­",
-        "ঙ্ক্ষ": "•¶", "ঙ্ক": "¼", "ঙ্খ": "•L", "ঙ্গ": "½", "ঙ্ঘ": "•N", "ঙ্ম": "O&g",
-
-        "চ্চ": "”P", "চ্ছ্ব": "”Q¡", "চ্ছ": "”Q", "চ্ঞ": "”T", "চ্র": "P«",
-        "চ্যু": "Py¨", "চ্য": "P¨", "ঞ্চ": "Â", "ঞ্ছ": "Ã", "ঞ্জ": "Ä", "ঞ্ঝ": "Å",
-
-        "জ্জ্ব": "¾¡", "জ্জ": "¾", "জ্ঝ": "À", "জ্ঞ": "Á", "জ্ব": "R¡", "জ্র": "R«",
-        "জ্যু": "Ry¨", "জ্য": "R¨",
-
-        "ট্ট": "Æ", "ট্ব": "U¡", "ট্ম": "U¥", "ট্র": "U«", "ট্য": "U¨",
-        "ড্ড": "Ç", "ড্র": "W«", "ড্যু": "Wy¨", "ড্য": "W¨",
-
-        "ণ্ট্র": "È«", "ণ্ট": "È", "ণ্ঠ": "É", "ণ্ড্র": "Û«", "ণ্ড": "Ê",
-        "ণ্ব": "Y^", "ণ্ম": "Y&g", "ণ্য": "Y¨",
-
-        "ত্ত্ব": "Ë¡", "ত্ত্র": "Ë«", "ত্ত্য": "Ë¨", "ত্ত": "Ë", "ত্থ": "Ì", "ত্ন": "Zœ",
-        "ত্ম্য": "Z¥¨", "ত্ম": "Z¥", "তু": "Zz", "থু": "_z", "দু": "\x60z", "ধু": "ay", "ত্ব": "Z¡", "ত্র্য": "Î", "ত্র": "Î",
-        "ত্যু": "Zz¨", "ত্যূ": "Z‚¨", "ত্য": "Z¨",
-
-        "দ্গ্র": "\x60&MÖ", "দ্গ": "\x60&M", "দ্ঘ": "\x60&N", "দ্দ": "Ï", "দ্ধ": "×",
-        "দ্ব": "Ø", "দ্ভ": "™¢", "দ্ম": "Ù", "দ্রু": "\x60ª“", "দ্র": "\x60ª",
-        "দ্যু": "\x60y¨", "দ্য": "\x60¨",
-
-        "ধ্ব": "aŸ", "ধ্ম": "a¥", "ধ্র": "a«", "ধ্যু": "ay¨", "ধ্য": "a¨",
-
-        "ন্দ্র": "›\x60ª", "ন্দ্ব": "›Ø", "ন্দু": "›\x60y", "ন্দ": "›\x60", "ন্ধ্য": "Ü¨", "ন্ধ": "Ü",
-        "ন্ন": "bœ", "ন্ব": "š^", "ন্ম": "b¥", "ন্ত্ব": "š—¡", "ন্তু": "š‘",
-        "ন্ত্য": "šÍ¨", "ন্ত": "š—", "ন্ত্র": "š¿", "নু": "by", "ন্থ": "š’", "ন্য": "b¨",
-        "ন্ট": "›U", "ন্ঠ": "Ú", "ন্ড্র": "Û«", "ন্ড": "Û",
-
-        "প্ট": "Þ", "প্ত": "ß", "প্ন": "cœ", "প্প": "à", "প্স": "á",
-        "প্যু": "cz¨", "প্য": "c¨", "পু": "cz", "ফু": "dz", "প্র": "cÖ", "প্ল": "c­",
-        "ফ্র": "d«", "ফ্ল": "d¬", "ফ্যু": "dz¨", "ফ্য": "d¨",
-
-        "ব্দ": "ã", "ব্ধ": "ä", "ব্ব": "eŸ", "ব্জ": "â", "ব্র": "eª", "ব্ল": "e­",
-        "ব্যু": "ey¨", "ব্য": "e¨", "বু": "ez", "ভু": "fz", "ভ্র": "å", "ভ্যু": "fz¨", "ভ্য": "f¨", "ভূ": "f‚",
-
-        "ম্প্র": "¤cÖ", "ম্প": "¤ú", "মু": "gy", "ম্ফ": "ç", "ম্ব": "¤^", "ম্ভ্র": "¤£", "ম্ভ": "¤¢",
-        "ম্ম": "¤§", "ম্ন": "gœ", "ম্র": "g«", "ম্য": "g¨", "ম্ল": "¤­",
-
-        "ল্ক": "é", "ল্গ": "ê", "ল্ট": "ë", "ল্ড": "ì", "ল্প": "í", "ল্ফ": "î",
-        "ল্ব": "j¦", "ল্ম": "j¥", "ল্ল": "jø", "ল্যু": "jy¨", "ল্য": "j¨", "লু": "jz",
-
-        "গু": "¸", "ঘু": "Nz", "চু": "Pz", "ছু": "Qz", "জু": "Rz", "ঝু": "Sz", "টু": "Uz", "ঠু": "Vz", "ডু": "Wz", "ঢু": "Xz", "গু": "¸", "রু": "iæ", "রূ": "iƒ", "শু": "ï", "হু": "û", "হৃ": "ü",
-        "শ্চ": "ð", "শ্ন": "kœ", "শ্ব": "k¦", "শ্ম": "k¥", "শ্র": "kÖ",
-        "শ্যু": "ky¨", "শ্য": "k¨", "শ্ল": "k­",
-
-        "ষ্ক্র": "®Œ", "ষ্ক": "®‹", "ষ্ট্র": "ó«", "ষ্ট": "ó", "ষ্ঠ": "ô", "ষ্ণ": "ò",
-        "ষ্প": "®ú", "ষ্ফ": "õ", "ষ্ম": "®§",
-
-        "স্ক্র": "¯Œ", "স্ক": "¯‹", "ক্স": "·", "স্খ": "ö", "স্ট্র": "÷«", "স্ট": "÷",
-        "স্ত্র": "¯¿", "স্ত্য": "¯Í¨", "স্তু": "¯‘", "স্ত": "¯Í",
-        "স্থ্য": "¯’¨", "স্থ্য়": "¯’¨", "স্থ": "¯’", "স্ন": "mœ", "স্প": "¯ú", "স্ফ": "ù",
-        "স্ব": "¯^", "স্য": "m¨", "স্ম": "¯§", "স্র": "m«", "স্ল": "¯­",
-
-        "হ্ণ": "nè", "হ্ন": "ý", "হ্ব": "nŸ", "হ্র": "n«", "হ্য": "n¨", "হ্ল": "n¬",
-
-        "র্": "©", "্র": "«", "্য": "¨", "্": "&",
-
-        "আ": "Av", "অ": "A", "ই": "B", "ঈ": "C", "উ": "D", "ঊ": "E", "ঋ": "F",
-        "এ": "G", "ঐ": "H", "ও": "I", "ঔ": "J",
-
-        "ক": "K", "খ": "L", "গ": "M", "ঘ": "N", "ঙ": "O", "চ": "P", "ছ": "Q",
-        "জ": "R", "ঝ": "S", "ঞ": "T", "ট": "U", "ঠ": "V", "ড": "W", "ঢ": "X",
-        "ণ": "Y", "ত": "Z", "থ": "_", "দ": "\x60", "ধ": "a", "ন": "b", "প": "c",
-        "ফ": "d", "ব": "e", "ভ": "f", "ম": "g", "য": "h", "র": "i", "ল": "j",
-        "শ": "k", "ষ": "l", "স": "m", "হ": "n", "ড়": "o", "ঢ়": "p", "য়": "q", "ৎ": "r",
-        "ং": "s", "ঃ": "t", "ঁ": "u",
-
-        "া": "v", "ি": "w", "ী": "x", "ু": "z", "ূ": "~", "ৃ": "„", "ে": "‡", "ৈ": "‰", "ৗ": "Š",
-        "০": "0", "১": "1", "২": "2", "৩": "3", "৪": "4", "৫": "5", "৬": "6", "৭": "7", "৮": "8", "৯": "9"
-    };
-
-    for (const key of Object.keys(u2b).sort((a, b) => b.length - a.length)) {
-        str = str.split(key).join(u2b[key]);
-    }
-
-    // Legacy Bijoy encodes টে as †U in this converter family.
-    return str.replace(/‡U/g, "†U");
-}
-
-
-// ============================================================================
-// BIJOY -> UNICODE
-// ============================================================================
 
 function convertBijoyToUnicode(text) {
-    if (!text) return "";
+            if (!text) return "";
 
-    let str = String(text).replace(/[\u200B-\u200D\uFEFF]/g, "");
+            let str = text.replace(/[\u200B-\u200D\uFEFF\+]/g, "");
 
-    const b2u = {
-        "ª¨": "্র্য", "i¨": "র‌্য",
-        "¶g": "ক্ষ্ম", "²": "ক্ষ্ম", "¶¨": "ক্ষ্য", "¶z": "ক্ষু", "¶‚": "ক্ষূ", "¶": "ক্ষ", "µ": "ক্র", "Ü": "ন্ধ",
+            const b2uJukta = {
+                '›U':'ন্ট', 'Þ':'প্ট', '®‹':'ষ্ক', 'é':'ল্ক', 'ê':'ল্গ', 'ì':'ল্ড', 'ð':'শ্চ', '¯‹…':'স্কৃ',
+                'M¦':'গ্ব', 'fz':'ভু', 'L¡':'খ্ব', '°':'ক্ক', '±':'ক্ট', '³':'ক্ত', 'K¡':'ক্ব',
+                '·':'ক্স', '¶':'ক্ষ', '²':'ক্ষ্ম', '¶¨':'ক্ষ্য', '¶z':'ক্ষু',
+                'Á':'জ্ঞ', '¼':'ঙ্ক', '¼L':'ঙ্খ', '½':'ঙ্গ', '½N':'ঙ্ঘ', 'Æ':'ট্ট', 'Ç':'ড্ড',
+                'È':'ণ্ট', 'É':'ণ্ঠ', 'Û':'ণ্ড', '\xDB':'ণ্ড',
+                'Ë':'ত্ত', 'Ì':'ত্থ', 'Î':'ত্র', 'Ï':'দ্দ', '×':'দ্ধ', 'Ø':'দ্ব', 'Ù':'দ্ম',
+                '›`':'ন্দ', 'Ü':'ন্ধ', 'bœ':'ন্ন', 'b¦':'ন্ব', 'b¥':'ন্ম', '›`«':'ন্দ্র', '`ª':'দ্র',
+                '¤ú':'ম্প', '¤^':'ম্ব', '¤§':'ম্ম', '¤¢':'ম্ভ', 'Ý':'ন্স', 'Z¥':'ত্ম', 'Zœ':'ত্ন',
+                'Z¥¨':'ত্ম্য', '÷':'স্ট', 'ó':'ষ্ট', 'ô':'ষ্ঠ', 'ò':'ষ্ণ', '®ú':'ষ্প', '®ù':'ষ্ফ',
+                '®§':'ষ্ম', '¯‹':'স্ক', '¯Œ':'স্খ', '¯’':'স্থ', 'mœ':'স্ন', '¯ú':'স্প', 'ù':'স্ফ',
+                '¯§':'স্ম', '¯^':'স্ব', '¯Í':'স্ত', 'm&m':'স্স',
+                'þ':'হ্ম', 'û':'হু', 'ü':'হৃ', 'ý':'হ্ন', 'nŸ':'হ্ব', 'ß':'প্ত', 'ã':'ব্দ',
+                'ä':'ব্ধ', 'e&e':'ব্ব', 'e&R':'ব্জ',
+                'kÖ':'শ্র', 'µ':'ক্র', 'MÖ':'গ্র', 'cÖ':'প্র', 'W«':'ড্র', 'U«':'ট্র',
+                'd«':'ফ্র', 'eª':'ব্র',
+                'eø':'ব্ল', 'K¬':'ক্ল', 'Mø':'গ্ল', 'cø':'প্ল', 'd¬':'ফ্ল', 'gø':'ম্ল',
+                'kø':'শ্ল', 'mø':'স্ল', 'n&j':'হ্ল',
+                '\xC2':'ঞ্চ', 'Â':'ঞ্চ', '\xC3':'ঞ্ছ', 'Ã':'ঞ্ছ', '\xC4':'ঞ্জ', 'Ä':'ঞ্জ',
+                'iæ':'রু', 'i~':'রূ', 'ï':'শু', '¸':'গু', 'š‘':'ন্তু', '¯‘':'স্তু',
+                '”P':'চ্চ', '\x94P':'চ্চ', '”Q':'চ্ছ', '\x94Q':'চ্ছ', '”':'চ্', '\x94':'চ্',
+                '•':'চ্ছ', '¾':'জ্জ', 'S&S':'ঝ্ঝ', '`&N':'দ্ঘ', 'šÍ':'ন্ত', 'š’':'ন্থ',
+                'í':'ল্প', 'j&e':'ল্ব', 'j&g':'ল্ম', 'jø':'ল্ল', 'j&d':'ল্ফ',
+                'aŸ':'ধ্ব', 'k¦':'শ্ব', 'Z¡':'ত্ব', '_¡':'থ্ব', 'gœ':'ম্ন', 'k&g':'শ্ম',
+                '`¨':'দ্য', 'š¿':'ন্ত্র', '¤cÖ':'ম্প্র',
+                '¯’¨':'স্থ্য', 'ó«':'ষ্ট্র',
+                'kœ':'শ্ন', 'e¨':'ব্য', '¯¿':'স্ত্র', 'Ë¡':'ত্ত্ব', '›Ø':'ন্দ্ব',
+                'cœ':'প্ন', 'Z¨':'ত্য', '¯‹«':'স্ক্র', '÷«':'স্ট্র', '_«':'থ্র',
+                'c&c':'প্প', 'c&m':'প্স', '¼¶':'ঙ্ক্ষ', 'O&g':'ঙ্ম', '\xBB':'গ্ধ', '»':'গ্ধ',
+                '¨':'্য', '«':'্র', '&':'্',
+                'Kz':'কু', 'K‚':'কূ', 'Pz':'চু', 'P‚':'চূ', 'Sz':'ঝু', 'S‚':'ঝূ',
+                'Zz':'তু', 'Z‚':'তূ', 'f‚':'ভূ', 'K…':'কৃ', 'Z…':'তৃ',
+                'Zz¨':'ত্যু', 'cz¨':'প্যু', 'dz¨':'ফ্যু', 'fz¨':'ভ্যু', 'n~¨':'হ্যু',
+                'Ky¨':'ক্যু', 'My¨':'গ্যু', 'Py¨':'চ্যু', 'Ry¨':'জ্যু', 'Wy¨':'ড্যু',
+                '`y¨':'দ্যু', 'ay¨':'ধ্যু', 'ey¨':'ব্যু', 'jy¨':'ল্যু', 'k~¨':'শ্যু',
+                'Z‚¨':'ত্যূ'
+            };
 
-        "k¥": "শ্ম", "kÖ": "শ্র", "k¦": "শ্ব", "kœ": "শ্ন", "k~¨": "শ্যু", "k¨": "শ্য", "k­": "শ্ল",
-        "›\x60ª": "ন্দ্র", "›\x60«": "ন্দ্র", "›\x60": "ন্দ", "›U": "ন্ট", "›Ø": "ন্দ্ব",
-        "š¿": "ন্ত্র", "š—¡": "ন্ত্ব", "šÍ¨": "ন্ত্য", "š—": "ন্ত", "šÍ": "ন্ত", "š‘": "ন্তু", "š’": "ন্থ",
-        "™¢": "দ্ভ", "¸": "গু", "˜M": "দ্গ", "˜N": "দ্ঘ", "˜¡": "দ্ব", "Ø": "দ্ব", "Ï": "দ্দ", "×": "দ্ধ", "Ù": "দ্ম",
-        "\x60ª“": "দ্রু", "\x60ª": "দ্র", "\x60y¨": "দ্যু", "\x60¨": "দ্য",
-
-        "aŸ": "ধ্ব", "a¥": "ধ্ম", "a«": "ধ্র", "ay¨": "ধ্যু", "a¨": "ধ্য",
-
-        "•¶": "ঙ্ক্ষ", "•L": "ঙ্খ", "•N": "ঙ্ঘ", "¼": "ঙ্ক", "½": "ঙ্গ",
-
-        "Â": "ঞ্চ", "Ã": "ঞ্ছ", "Ä": "ঞ্জ", "Å": "ঞ্ঝ", "”Q¡": "চ্ছ্ব", "”P": "চ্চ", "”Q": "চ্ছ", "”T": "চ্ঞ",
-        "¾¡": "জ্জ্ব", "¾": "জ্জ", "À": "জ্ঝ", "Á": "জ্ঞ", "R¡": "জ্ব",
-
-        "Æ": "ট্ট", "U¡": "ট্ব", "U¥": "ট্ম", "U«": "ট্র", "U¨": "ট্য",
-        "Ç": "ড্ড", "W«": "ড্র", "Wy¨": "ড্যু", "W¨": "ড্য",
-        "È«": "ণ্ট্র", "È": "ণ্ট", "É": "ণ্ঠ", "Û«": "ণ্ড্র", "Ê": "ণ্ড", "Y^": "ণ্ব", "Y&g": "ণ্ম", "Y¨": "ণ্য",
-
-        "Ë¡": "ত্ত্ব", "Ë«": "ত্ত্র", "Ë¨": "ত্ত্য", "Ë": "ত্ত", "Ì": "ত্থ", "Zœ": "ত্ন",
-        "Z¥¨": "ত্ম্য", "Z¥": "ত্ম", "Z¡": "ত্ব", "Î¨": "ত্র্য", "Î": "ত্র", "Zz¨": "ত্যু", "Z‚¨": "ত্যূ", "Z¨": "ত্য",
-
-        "Þ": "প্ট", "ß": "প্ত", "cœ": "প্ন", "à": "প্প", "á": "প্স", "cz¨": "প্যু", "c¨": "প্য", "cÖ": "প্র", "c­": "প্ল", "cø": "প্ল",
-        "d¬": "ফ্ল", "d«": "ফ্র", "dz¨": "ফ্যু", "d¨": "ফ্য",
-
-        "â": "ব্জ", "ã": "ব্দ", "ä": "ব্ধ", "eŸ": "ব্ব", "e­": "ব্ল", "eª": "ব্র", "ey¨": "ব্যু", "e¨": "ব্য",
-        "å": "ভ্র", "fz¨": "ভ্যু", "f¨": "ভ্য",
-
-        "¤cÖ": "ম্প্র", "¤ú": "ম্প", "ç": "ম্ফ", "¤^": "ম্ব", "¤¢": "ম্ভ", "¤£": "ম্ভ্র", "¤§": "ম্ম", "gœ": "ম্ন", "g«": "ম্র", "g¨": "ম্য", "¤­": "ম্ল",
-
-        "i“": "রু", "iæ": "রু", "iƒ": "রূ",
-        "é": "ল্ক", "ê": "ল্গ", "ë": "ল্ট", "ì": "ল্ড", "í": "ল্প", "î": "ল্ফ", "j¦": "ল্ব", "j¥": "ল্ম", "jø": "ল্ল", "jy¨": "ল্যু", "j¨": "ল্য",
-
-        "ï": "শু", "ð": "শ্চ", "®Œ": "ষ্ক্র", "®‹": "ষ্ক", "ó«": "ষ্ট্র", "ó": "ষ্ট", "ô": "ষ্ঠ", "ò": "ষ্ণ", "®ú": "ষ্প", "õ": "ষ্ফ", "®§": "ষ্ম",
-        "¯Œ": "স্ক্র", "¯‹": "স্ক", "ö": "স্খ", "÷«": "স্ট্র", "÷": "স্ট", "¯¿": "স্ত্র", "¯Í¨": "স্ত্য", "¯Í": "স্ত", "¯—": "স্ত", "¯‘": "স্তু",
-        "¯’¨": "স্থ্য়", "¯’": "স্থ", "mœ": "স্ন", "¯ú": "স্প", "ù": "স্ফ", "¯^": "স্ব", "¯§": "স্ম", "¯­": "স্ল", "m¨": "স্য", "m«": "স্র", "mø": "স্ল",
-
-        "©": "র্", "û": "হু", "nè": "হ্ণ", "ý": "হ্ন", "nŸ": "হ্ব", "n«": "হ্র", "n¨": "হ্য", "n¬": "হ্ল", "ü": "হৃ",
-
-        "•": "ঙ্", "æ": "ু", "‚": "ূ", "ƒ": "ূ", "„": "ৃ", "…": "ৃ", "†": "ে", "‡": "ে", "ˆ": "ৈ", "‰": "ৈ", "Š": "ৗ",
-
-        "Av": "আ", "A": "অ", "B": "ই", "C": "ঈ", "D": "উ", "E": "ঊ", "F": "ঋ", "G": "এ", "H": "ঐ", "I": "ও", "J": "ঔ",
-        "Kz": "কু", "Lz": "খু", "K": "ক", "L": "খ", "M": "গ", "N": "ঘ", "O": "ঙ", "P": "চ", "Q": "ছ", "R": "জ", "S": "ঝ", "T": "ঞ", "U": "ট", "V": "ঠ",
-        "Wz": "ডু", "Xz": "ঢু", "W": "ড", "X": "ঢ", "Y": "ণ", "Z": "ত", "_": "থ", "\x60": "দ", "a": "ধ", "b": "ন", "c": "প", "d": "ফ", "e": "ব", "f": "ভ", "g": "ম",
-        "h": "য", "i": "র", "j": "ল", "k": "শ", "l": "ষ", "m": "স", "n": "হ", "o": "ড়", "p": "ঢ়", "q": "য়", "r": "ৎ",
-        "s": "ং", "t": "ঃ", "u": "ঁ", "v": "া", "w": "ি", "x": "ী", "y": "ু", "z": "ু", "~": "ূ",
-        "·": "ক্স", "&": "্", "ª": "্র", "«": "্র", "Ö": "্র", "¨": "্য", "|": "।",
-        "0": "০", "1": "১", "2": "২", "3": "৩", "4": "৪", "5": "৫", "6": "৬", "7": "৭", "8": "৮", "9": "৯",
-        "Ô": "‘", "Õ": "’", "Ò": "“", "Ó": "”"
-    };
-
-    for (const key of Object.keys(b2u).sort((a, b) => b.length - a.length)) {
-        str = str.split(key).join(b2u[key]);
-    }
-
-    const isPreKar = ch => ch === "ি" || ch === "ৈ" || ch === "ে";
-    const isPostKar = ch =>
-        ch === "া" || ch === "ো" || ch === "ৌ" || ch === "ৗ" ||
-        ch === "ু" || ch === "ূ" || ch === "ী" || ch === "ৃ";
-    const isKar = ch => isPreKar(ch) || isPostKar(ch);
-    const isBanjon = ch =>
-        "কখগঘঙচছজঝঞটঠডঢণতথদধনপফবভমশষসরযলয়ংঃঁৎ".includes(ch);
-    const isHalant = ch => ch === "্";
-
-    for (let i = 0; i < str.length; i++) {
-        if (
-            i > 0 &&
-            isHalant(str.charAt(i)) &&
-            (isKar(str.charAt(i - 1)) || "ংঃঁ".includes(str.charAt(i - 1))) &&
-            i < str.length - 1
-        ) {
-            str =
-                str.substring(0, i - 1) +
-                str.charAt(i) +
-                str.charAt(i + 1) +
-                str.charAt(i - 1) +
-                str.substring(i + 2);
-        }
-
-        if (
-            i > 0 &&
-            i < str.length - 1 &&
-            str.charAt(i) === "্" &&
-            str.charAt(i - 1) === "র" &&
-            str.charAt(i - 2) !== "্" &&
-            isKar(str.charAt(i + 1))
-        ) {
-            str =
-                str.substring(0, i - 1) +
-                str.charAt(i + 1) +
-                str.charAt(i - 1) +
-                str.charAt(i) +
-                str.substring(i + 2);
-        }
-
-        if (
-            i < str.length - 1 &&
-            str.charAt(i) === "র" &&
-            str.charAt(i + 1) === "্" &&
-            (i === 0 || str.charAt(i - 1) !== "্")
-        ) {
-            let j = 1;
-            while (true) {
-                if (i - j < 0) break;
-
-                if (
-                    isBanjon(str.charAt(i - j)) &&
-                    isHalant(str.charAt(i - j - 1))
-                ) {
-                    j += 2;
-                } else if (j === 1 && isKar(str.charAt(i - j))) {
-                    j++;
-                } else {
-                    break;
-                }
+            const keys = Object.keys(b2uJukta).sort((a, b) => b.length - a.length);
+            for (const key of keys) {
+                str = str.split(key).join(b2uJukta[key]);
             }
 
-            str =
-                str.substring(0, i - j) +
-                str.charAt(i) +
-                str.charAt(i + 1) +
-                str.substring(i - j, i) +
-                str.substring(i + 2);
+            const b2u = {
+                'A':'অ', 'B':'ই', 'C':'ঈ', 'D':'উ', 'E':'ঊ', 'F':'ঋ', 'G':'এ', 'H':'ঐ',
+                'I':'ও', 'J':'ঔ', 'K':'ক', 'L':'খ', 'M':'গ', 'N':'ঘ', 'O':'ঙ', 'P':'চ',
+                'Q':'ছ', 'R':'জ', 'S':'ঝ', 'T':'ঞ', 'U':'ট', 'V':'ঠ', 'W':'ড', 'X':'ঢ',
+                'Y':'ণ', 'Z':'ত', '_':'থ', '`':'দ', 'a':'ধ', 'b':'ন', 'c':'প', 'd':'ফ',
+                'e':'ব', 'f':'ভ', 'g':'ম', 'h':'য', 'i':'র', 'j':'ল', 'k':'শ', 'l':'ষ',
+                'm':'স', 'n':'হ', 'o':'ড়', 'p':'ঢ়', 'q':'য়', 'r':'ৎ', 's':'ং', 't':'ঃ',
+                'u':'ঁ', 'v':'া', 'w':'ি', 'x':'ী', 'y':'ু', '~':'ূ', 'z':'ু', '‚':'ূ',
+                '\x82':'ূ', '\x85':'ৃ', '…':'ৃ', '„':'ৃ', '\x84':'ৃ',
+                '\x86':'ে', '†':'ে', '\x87':'ে', '‡':'ে',
+                '\x88':'ৈ', 'ˆ':'ৈ', '\x8A':'ৗ', 'Š':'ৗ',
+                '|':'।',
+                '0':'০', '1':'১', '2':'২', '3':'৩', '4':'৪',
+                '5':'৫', '6':'৬', '7':'৭', '8':'৮', '9':'৯',
+                '©':'©'
+            };
 
-            i++;
-            continue;
-        }
+            str = str.replace(/Av/g, 'আ');
 
-        if (
-            i < str.length - 1 &&
-            isPreKar(str.charAt(i)) &&
-            str.charAt(i + 1) !== " "
-        ) {
-            let j = 1;
-            while (i + j < str.length && isBanjon(str.charAt(i + j))) {
-                if (
-                    i + j + 1 < str.length &&
-                    isHalant(str.charAt(i + j + 1))
-                ) {
-                    j += 2;
-                } else {
-                    break;
-                }
+            let out = "";
+            for (let i = 0; i < str.length; i++) {
+                out += b2u[str[i]] || str[i];
             }
 
-            str =
-                str.substring(0, i) +
-                str.substring(i + 1, i + j + 1) +
-                str.charAt(i) +
-                str.substring(i + j + 1);
+            str = out;
 
-            i += j;
+            const cons = "কখগঘঙচছজঝঞটঠডঢণতথদধনপফবভমযরলশষসহড়ঢ়য়ৎংঃঁ";
+            const regexOrder = new RegExp(
+                "([িেৈ])?([" + cons + "](?:\u09CD[" + cons + "])*)(©)?([াীুূৃৗ])?",
+                "g"
+            );
+
+            str = str.replace(regexOrder, function(match, preKar, cluster, ref, postKar) {
+                return (ref ? "র্" : "") + cluster + (preKar || "") + (postKar || "");
+            });
+
+            str = str
+                .replace(/অা/g, 'আ')
+                .replace(/েৃ/g, 'ৃ')
+                .replace(/ৌ/g, 'ৌ')
+                .replace(/ো/g, 'ো')
+                .replace(/([ুূৃ])্য/g, '্য$1');
+
+            return str.normalize("NFC");
         }
-
-        if (
-            i < str.length - 1 &&
-            str.charAt(i) === "ঁ" &&
-            isPostKar(str.charAt(i + 1))
-        ) {
-            str =
-                str.substring(0, i) +
-                str.charAt(i + 1) +
-                str.charAt(i) +
-                str.substring(i + 2);
-        }
-    }
-
-    return str
-        .replace(/অা/g, "আ")
-        .replace(/চিত্র/g, "চিত্র্য");
-}
-
-// ============================================================================
-
-
 
 // ============================================================================
 // CONVERTER ACTION HANDLER
 // ============================================================================
 async function runSmartConverter(direction) {
-    try {
-        await Word.run(async (context) => {
-            const selection = context.document.getSelection();
-            selection.load("text, font/bold, font/italic, font/size");
-            const paras = selection.paragraphs;
-            paras.load("items");
-            await context.sync();
-            
-            const rawText = selection.text;
-            if (!rawText || !rawText.trim()) { showStatus("Select text to convert!", true); return; }
+            try {
+                await Word.run(async (context) => {
+                    const selection = context.document.getSelection();
+                    selection.load("text, font/bold, font/italic, font/size");
+                    const paras = selection.paragraphs;
+                    paras.load("items");
+                    await context.sync();
 
-            let origAlign = "Left";
-            if (paras.items.length > 0) {
-                paras.items[0].load("alignment");
-                await context.sync();
-                origAlign = paras.items[0].alignment || "Left";
-            }
-            
-            let origBold = selection.font.bold === true;
-            let origItalic = selection.font.italic === true;
-            let origSize = selection.font.size || 10.5;
+                    const rawText = selection.text;
+                    if (!rawText || !rawText.trim()) { showStatus("Select text to convert!", true); return; }
 
-            let targetDirection = direction;
-            let prefix = targetDirection === "UniToBijoy" ? "u2b" : "b2u";
-            let customFontName = document.getElementById(`${prefix}-font`).value.trim();
-            let customFontSize = document.getElementById(`${prefix}-size`).value.trim();
-            
-            let defaultFont = targetDirection === "UniToBijoy" ? "SutonnyMJ" : "Kalpurush";
-            let finalFontName = customFontName !== "" ? customFontName : defaultFont;
-            let finalFontSize = customFontSize !== "" ? parseFloat(customFontSize) : origSize;
+                    let origAlign = "Left";
+                    if (paras.items.length > 0) {
+                        paras.items[0].load("alignment");
+                        await context.sync();
+                        origAlign = paras.items[0].alignment || "Left";
+                    }
 
-            let cursor = selection.insertText("", "Replace");
-            
-            cursor.paragraphs.load("items");
-            await context.sync();
-            if (cursor.paragraphs.items.length > 0) {
-                cursor.paragraphs.items[0].alignment = origAlign;
-            }
+                    let origBold = selection.font.bold === true;
+                    let origItalic = selection.font.italic === true;
+                    let origSize = selection.font.size || 10.5;
 
-            if (targetDirection === "UniToBijoy") {
-                let chunkRegex = /([ \t\r\n\v\(\)\[\]\{\}\'\"‘“’”\.\,\:\;\!\?\-\/\$\%\+\=\<\>°_@#&\*\\a-zA-Z0-9]+)/g;
-                let textChunks = rawText.split(chunkRegex);
+                    let targetDirection = direction;
+                    let prefix = targetDirection === "UniToBijoy" ? "u2b" : "b2u";
+                    let customFontName = document.getElementById(`${prefix}-font`).value.trim();
+                    let customFontSize = document.getElementById(`${prefix}-size`).value.trim();
 
-                for (let i = 0; i < textChunks.length; i++) {
-                    let chunk = textChunks[i];
-                    if (!chunk) continue;
+                    let defaultFont = targetDirection === "UniToBijoy" ? "SutonnyMJ" : "Kalpurush";
+                    let finalFontName = customFontName !== "" ? customFontName : defaultFont;
+                    let finalFontSize = customFontSize !== "" ? parseFloat(customFontSize) : origSize;
+
+                    let cursor = selection.insertText("", "Replace");
                     
-                    let rng = cursor.insertText(/[a-zA-Z0-9]/.test(chunk) ? chunk : convertUnicodeToBijoy(chunk), "Before");
-                    if (/[^\s]/.test(chunk)) { rng.font.name = /[a-zA-Z0-9]/.test(chunk) ? "Times New Roman" : finalFontName; }
-                    rng.font.size = finalFontSize; rng.font.bold = origBold; rng.font.italic = origItalic;
-                }
-            } else {
-                let protectedEng = [];
-                let protectRegex = /(\([A-Za-z0-9\s\-\.\_]+\)|\[[A-Za-z0-9\s\-\.\_]+\]|"[A-Za-z0-9\s\-\.\_]+"|'[A-Za-z0-9\s\-\.\_]+')/g;
-                let safeText = rawText.replace(protectRegex, function(match) { protectedEng.push(match); return "▲" + (protectedEng.length - 1) + "▲"; });
+                    cursor.paragraphs.load("items");
+                    await context.sync();
+                    if (cursor.paragraphs.items.length > 0) {
+                        cursor.paragraphs.items[0].alignment = origAlign;
+                    }
 
-                let converted = convertBijoyToUnicode(safeText);
-                let chunkRegex = /([ \t\r\n\v\(\)\[\]\{\}\'\"‘“’”\.\,\:\;\!\?\-\/\$\%\+\=\<\>°_@#&\*\\]+)/g;
-                let textChunks = converted.split(/(▲\d+▲)/g);
+                    if (targetDirection === "UniToBijoy") {
+                        let chunkRegex = /([ \t\r\n\v\(\)\[\]\{\}\'\"‘“’”\.\,\:\;\!\?\-\/\$\%\+\=\<\>°_@#&\*\\a-zA-Z0-9]+)/g;
+                        let textChunks = rawText.split(chunkRegex);
 
-                for (let i = 0; i < textChunks.length; i++) {
-                    let chunk = textChunks[i];
-                    if (!chunk) continue;
-                    
-                    let match = chunk.match(/^▲(\d+)▲$/);
-                    if (match) {
-                        let engText = protectedEng[parseInt(match[1])];
-                        let rng = cursor.insertText(engText, "Before");
-                        rng.font.name = "Times New Roman"; rng.font.size = finalFontSize; rng.font.bold = origBold; rng.font.italic = origItalic;
-                    } else {
-                        let subChunks = chunk.split(chunkRegex);
-                        for (let j = 0; j < subChunks.length; j++) {
-                            let subChunk = subChunks[j];
-                            if (!subChunk) continue;
-                            let rng = cursor.insertText(subChunk, "Before");
-                            if (/[^\s]/.test(subChunk)) { rng.font.name = finalFontName; }
+                        for (let i = 0; i < textChunks.length; i++) {
+                            let chunk = textChunks[i];
+                            if (!chunk) continue;
+                            
+                            let rng = cursor.insertText(/[a-zA-Z0-9]/.test(chunk) ? chunk : convertUnicodeToBijoy(chunk), "Before");
+                            if (/[^\s]/.test(chunk)) { rng.font.name = /[a-zA-Z0-9]/.test(chunk) ? "Times New Roman" : finalFontName; }
                             rng.font.size = finalFontSize; rng.font.bold = origBold; rng.font.italic = origItalic;
                         }
-                    }
-                }
-            }
-            await context.sync(); showStatus(`Text Converted smoothly!`);
-        });
-    } catch (error) { showStatus("Error: " + (error.message || "Unknown"), true); }
-}
+                    } else {
+                        let protectedEng = [];
+                        let protectRegex = /(\([A-Za-z0-9\s\-\.\_]+\)|\[[A-Za-z0-9\s\-\.\_]+\]|"[A-Za-z0-9\s\-\.\_]+"|'[A-Za-z0-9\s\-\.\_]+')/g;
+                        let safeText = rawText.replace(protectRegex, function(match) { protectedEng.push(match); return "▲" + (protectedEng.length - 1) + "▲"; });
 
+                        let converted = convertBijoyToUnicode(safeText);
+                        let chunkRegex = /([ \t\r\n\v\(\)\[\]\{\}\'\"‘“’”\.\,\:\;\!\?\-\/\$\%\+\=\<\>°_@#&\*\\]+)/g;
+                        let textChunks = converted.split(/(▲\d+▲)/g);
+
+                        for (let i = 0; i < textChunks.length; i++) {
+                            let chunk = textChunks[i];
+                            if (!chunk) continue;
+                            
+                            let match = chunk.match(/^▲(\d+)▲$/);
+                            if (match) {
+                                let engText = protectedEng[parseInt(match[1])];
+                                let rng = cursor.insertText(engText, "Before");
+                                rng.font.name = "Times New Roman"; rng.font.size = finalFontSize; rng.font.bold = origBold; rng.font.italic = origItalic;
+                            } else {
+                                let subChunks = chunk.split(chunkRegex);
+                                for (let j = 0; j < subChunks.length; j++) {
+                                    let subChunk = subChunks[j];
+                                    if (!subChunk) continue;
+                                    let rng = cursor.insertText(subChunk, "Before");
+                                    if (/[^\s]/.test(subChunk)) { rng.font.name = finalFontName; }
+                                    rng.font.size = finalFontSize; rng.font.bold = origBold; rng.font.italic = origItalic;
+                                }
+                            }
+                        }
+                    }
+                    await context.sync(); showStatus(`Text Converted smoothly!`);
+                });
+            } catch (error) { showStatus("Error: " + (error.message || "Unknown"), true); }
+        }
 
 // ==========================================
 // DUPLICATE FINDER LOGIC
