@@ -1125,7 +1125,11 @@ function convertUnicodeToBijoy(text) {
         ["b&a", "Ü"],
         ["D`&f", "D™¢"],
         ["D`&fvwmZ", "D™¢vwmZ"],
-        ["MÖvwdK&m", "MÖvwd·"]
+        ["MÖvwdK&m", "MÖvwd·"],
+
+        // Exact legacy Bijoy aliases required for these Unicode forms.
+        ["f~", "f‚"],                    // ভূ
+        ["we›`z‡Z", "we›`y‡Z"]         // বিন্দুতে
     ];
 
     const converterFinalFixes = [
