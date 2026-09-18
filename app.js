@@ -704,9 +704,14 @@ function convertUnicodeToBijoy(text) {
 
     str = rearrangeUnicodeForBijoy(str);
 
-    const u2b = {
-        "।": "|", "‘": "Ô", "’": "Õ", "“": "Ò", "”": "Ó",
+    str = str
+        .replace(/।/g, "|")
+        .replace(/‘/g, "Ô")
+        .replace(/’/g, "Õ")
+        .replace(/“/g, "Ò")
+        .replace(/”/g, "Ó");
 
+    const u2b = {
         "্র্য": "ª¨", "র‌্য": "i¨",
         "ক্ষ্ম্য": "²¨", "ক্ষ্ম": "²", "ক্ষ্য": "¶¨", "ক্ষু": "¶z", "ক্ষূ": "¶‚", "ক্ষ": "¶",
 
@@ -859,11 +864,11 @@ function convertBijoyToUnicode(text) {
         "Ô": "‘", "Õ": "’", "Ò": "“", "Ó": "”"
     };
 
+    str = str.split("PÎ").join("চিত্র্য");
+
     for (const key of Object.keys(b2u).sort((a, b) => b.length - a.length)) {
         str = str.split(key).join(b2u[key]);
     }
-
-    str = str.split("PÎ").join("চিত্র্য");
 
     const isPreKar = ch => ch === "ি" || ch === "ৈ" || ch === "ে";
     const isPostKar = ch =>
