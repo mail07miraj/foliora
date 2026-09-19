@@ -2497,3 +2497,52 @@ If answer or explanation does not exist, use null.`;
         setLoading("btnExtractText", false); 
     }
 };
+// ====================================================================
+// DAY 6: PRICING MODAL, CHECKOUT & AUTO-SYNC LOGIC
+// ====================================================================
+
+function openPricingModal() {
+    document.getElementById('modalPricing').classList.remove('hidden');
+}
+
+function closePricingModal() {
+    document.getElementById('modalPricing').classList.add('hidden');
+}
+
+// লক স্ক্রিন অ্যাকশনে সরাসরি প্রাইসিং বা সাইন ইন আহ্বান
+function handleLockAction(productId) {
+    if (!FOLIORA_STATE.user || !FOLIORA_STATE.user.isLoggedIn) {
+        openAuthModal('signin');
+    } else {
+        openPricingModal();
+    }
+}
+
+// পেমেন্ট চেকআউট ইনিশিয়েট করা
+async function initiateCheckout(planId) {
+    if (!FOLIORA_STATE.user || !FOLIORA_STATE.user.isLoggedIn) {
+        closePricingModal();
+        openAuthModal('signin');
+        showStatus("প্ল্যান কিনতে অনুগ্রহ করে প্রথমে সাইন ইন করুন।", true);
+        return;
+    }
+
+    const userId = FOLIORA_STATE.user.id;
+    const userEmail = encodeURIComponent(FOLIORA_STATE.user.email);
+    
+    // প্রোডাকশন পেমেন্ট পেজ লিঙ্ক
+    const checkoutUrl = `https://foliora.com/checkout?user_id=${userId}&email=${userEmail}&plan=${planId}`;
+
+    // ব্রাউজারে পেমেন্ট লিঙ্ক ওপেন করা
+    window.open(checkoutUrl, "_blank");
+
+    closePricingModal();
+    showStatus("পেমেন্ট সম্পন্ন করার পর অ্যাড-ইনে ফিরে এসে Sync চাপুন বা একটু অপেক্ষা করুন।");
+}
+
+// ব্যবহারকারী পেমেন্ট শেষ করে Word-এ ফিরে আসলে স্বয়ংক্রিয় লাইসেন্স রিফ্রেশ
+window.addEventListener("focus", () => {
+    if (FOLIORA_STATE.user && FOLIORA_STATE.user.isLoggedIn && supabaseClient) {
+        refreshLiveEntitlements(false);
+    }
+});
