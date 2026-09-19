@@ -3,8 +3,8 @@
 // ====================================================================
 
 const SUPABASE_CONFIG = {
-    url: localStorage.getItem('foliora_supabase_url') || "https://dajfssubdipeqnmedwxo.supabase.co",
-    anonKey: localStorage.getItem('foliora_supabase_key') || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRhamZzc3ViZGlwZXFubWVkd3hvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg2MTAxODEsImV4cCI6MjEwNDE4NjE4MX0.cGBFywbbksMXOX-uzhM0obEPDEyC31I64zQ9d-TBwrU"
+    url: "https://dajfssubdipeqnmedwxo.supabase.co",
+    anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRhamZzc3ViZGlwZXFubWVkd3hvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg2MTAxODEsImV4cCI6MjEwNDE4NjE4MX0.cGBFywbbksMXOX-uzhM0obEPDEyC31I64zQ9d-TBwrU"
 };
 
 let supabaseClient = null;
@@ -19,8 +19,8 @@ const FOLIORA_STATE = {
     },
     activeProduct: 'mcq',
     entitlements: {
-        mcq: 'locked',     // ডাটাবেসে পেমেন্ট রেকর্ড ছাড়া ডিফল্ট LOCKED থাকবে
-        converter: 'free',  // অলওয়েজ ফ্রি
+        mcq: 'locked',     // নতুন ইউজারের জন্য locked থাকবে
+        converter: 'free',  // সবসময় ফ্রি
         ocr: 'free'         // ফ্রি ট্রায়াল কোটা
     },
     workspace: {
@@ -35,10 +35,10 @@ const FOLIORA_STATE = {
 };
 
 function initSupabase() {
-    const url = SUPABASE_CONFIG.url;
-    const key = SUPABASE_CONFIG.anonKey;
+    const url = SUPABASE_CONFIG.url || localStorage.getItem('foliora_supabase_url');
+    const key = SUPABASE_CONFIG.anonKey || localStorage.getItem('foliora_supabase_key');
 
-    if (url && key && window.supabase) {
+    if (url && key && typeof window.supabase !== "undefined" && window.supabase.createClient) {
         try {
             supabaseClient = window.supabase.createClient(url, key);
         } catch (err) {
@@ -131,8 +131,13 @@ async function handleLiveSignIn(e) {
     const email = document.getElementById('authSignInEmail').value.trim();
     const password = document.getElementById('authSignInPassword').value.trim();
 
+    // কানেকশন না থাকলে পুনরায় ইনিশিয়ালাইজ করার চেষ্টা করবে
     if (!supabaseClient) {
-        showStatus("সুপাবেজ সংযোগ পাওয়া যায়নি।", true);
+        initSupabase();
+    }
+
+    if (!supabaseClient) {
+        showStatus("সুপাবেজ সংযোগ পাওয়া যায়নি। ইন্টারনেট সংযোগ চেক করুন।", true);
         return;
     }
 
