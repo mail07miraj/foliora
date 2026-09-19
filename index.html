@@ -708,6 +708,76 @@
         </div>
     </div>
 
+    <!-- ====================================================================== -->
+    <!-- MODAL 5: PRICING & SUBSCRIPTION UPGRADE (DAY 6)                        -->
+    <!-- ====================================================================== -->
+    <div id="modalPricing" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-[fadeIn_0.15s_ease-out]">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm border border-slate-200 overflow-hidden max-h-[92vh] flex flex-col">
+            <!-- Modal Header -->
+            <div class="bg-slate-900 text-white px-4 py-3 flex items-center justify-between shrink-0">
+                <div class="flex items-center space-x-2">
+                    <div class="w-5 h-5 rounded bg-indigo-500 flex items-center justify-center text-[10px] font-black text-white">F</div>
+                    <h3 class="text-xs font-bold uppercase tracking-wider">Foliora Plans & Upgrades</h3>
+                </div>
+                <button onclick="closePricingModal()" class="text-slate-400 hover:text-white"><i class="fas fa-times"></i></button>
+            </div>
+
+            <!-- Modal Content -->
+            <div class="p-4 space-y-3.5 text-xs overflow-y-auto">
+                <p class="text-slate-500 text-[11px]">আপনার কাজের প্রয়োজন অনুযায়ী প্ল্যান বাছাই করে সাথে সাথে ফুল অ্যাক্সেস আনলক করুন।</p>
+
+                <!-- Plan 1: MCQ Studio Pro -->
+                <div class="border-2 border-indigo-200 rounded-xl p-3 bg-indigo-50/40 relative hover:border-indigo-500 transition">
+                    <span class="absolute -top-2.5 right-3 bg-indigo-600 text-white text-[9px] font-bold px-2 py-0.5 rounded-full uppercase">Most Popular</span>
+                    <div class="flex justify-between items-start mb-1.5">
+                        <div>
+                            <h4 class="font-bold text-slate-800 text-sm">MCQ Studio Pro</h4>
+                            <p class="text-[10px] text-slate-500">MCQ ফরম্যাটার, কিউ-ব্যাংক ও প্রশ্নপত্র জেনারেটর</p>
+                        </div>
+                        <div class="text-right">
+                            <span class="text-sm font-black text-indigo-700">৳৫০০</span>
+                            <span class="text-[10px] text-slate-500">/মাস</span>
+                        </div>
+                    </div>
+                    <ul class="text-[11px] text-slate-600 space-y-1 mb-3 pt-1 border-t border-indigo-100">
+                        <li><i class="fas fa-check text-indigo-600 mr-1.5"></i> আনলিমিটেড স্মার্ট ও নরমাল MCQ ফরম্যাটিং</li>
+                        <li><i class="fas fa-check text-indigo-600 mr-1.5"></i> ডুপ্লিকেট প্রশ্ন শনাক্তকরণ ও সল্যুশন</li>
+                        <li><i class="fas fa-check text-indigo-600 mr-1.5"></i> অটোমেটিক মাল্টিপল সেট প্রশ্নপত্র তৈরি</li>
+                    </ul>
+                    <button onclick="initiateCheckout('mcq_pro_monthly')" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 rounded-lg text-xs transition shadow-sm">
+                        Upgrade MCQ Studio
+                    </button>
+                </div>
+
+                <!-- Plan 2: OCR Studio Pro -->
+                <div class="border border-slate-200 rounded-xl p-3 bg-slate-50 relative hover:border-teal-500 transition">
+                    <div class="flex justify-between items-start mb-1.5">
+                        <div>
+                            <h4 class="font-bold text-slate-800 text-sm">OCR Studio Pro</h4>
+                            <p class="text-[10px] text-slate-500">ছবি ও ডকুমেন্টের AI লেআউট রিকনস্ট্রাকশন</p>
+                        </div>
+                        <div class="text-right">
+                            <span class="text-sm font-black text-teal-700">৳৮০০</span>
+                            <span class="text-[10px] text-slate-500">/মাস</span>
+                        </div>
+                    </div>
+                    <ul class="text-[11px] text-slate-600 space-y-1 mb-3 pt-1 border-t border-slate-200">
+                        <li><i class="fas fa-check text-teal-600 mr-1.5"></i> প্রতি মাসে ৫০০ পেজ হাই-স্পিড AI OCR কোটা</li>
+                        <li><i class="fas fa-check text-teal-600 mr-1.5"></i> জটিল যুক্তবর্ণ ও টেবিল নিখুঁত রিকভারি</li>
+                    </ul>
+                    <button onclick="initiateCheckout('ocr_pro_monthly')" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-semibold py-2 rounded-lg text-xs transition shadow-sm">
+                        Upgrade OCR Studio
+                    </button>
+                </div>
+
+                <!-- Lifetime Free Reminder -->
+                <div class="p-2.5 rounded-lg bg-slate-100 border border-slate-200 text-[11px] text-slate-600 flex items-center justify-between">
+                    <span><i class="fas fa-gift text-emerald-600 mr-1.5"></i> <strong>Foliora Converter:</strong> লাইফটাইম ফ্রি</span>
+                    <span class="text-emerald-700 font-bold">Active</span>
+                </div>
+            </div>
+        </div>
+    </div>
     <!-- EXTERNAL JS LOGIC -->
     <script src="app.js"></script>
 
