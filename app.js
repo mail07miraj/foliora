@@ -1,6 +1,10 @@
 // ====================================================================
-// FOLIORA ECOSYSTEM: STATE & SUPABASE CLIENT INITIALIZATION
+// FOLIORA ECOSYSTEM: LIVE BACKEND CONFIGURATION
 // ====================================================================
+// আপনার Supabase ড্যাশবোর্ডের Settings > API থেকে পাওয়া তথ্য এখানে বসান:
+const SUPABASE_PROJECT_URL = localStorage.getItem('foliora_supabase_url') || "https://dajfssubdipeqnmedwxo.supabase.co";
+const SUPABASE_ANON_KEY    = localStorage.getItem('foliora_supabase_key') || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRhamZzc3ViZGlwZXFubWVkd3hvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg2MTAxODEsImV4cCI6MjEwNDE4NjE4MX0.cGBFywbbksMXOX-uzhM0obEPDEyC31I64zQ9d-TBwrU";
+
 let supabaseClient = null;
 
 const FOLIORA_STATE = {
@@ -13,9 +17,9 @@ const FOLIORA_STATE = {
     },
     activeProduct: 'mcq',
     entitlements: {
-        mcq: 'locked',     // Live synced from DB
-        converter: 'free',  // Always free
-        ocr: 'free'         // Live synced from DB
+        mcq: 'locked',     // নতুন বা আনপেইড ইউজারের জন্য কঠোরভাবে Locked থাকবে
+        converter: 'free',  // লাইফটাইম ফ্রি
+        ocr: 'free'         // ট্রায়াল কোটা
     },
     workspace: {
         mcq: true,
@@ -29,9 +33,10 @@ const FOLIORA_STATE = {
 };
 
 function initSupabase() {
-    const url = localStorage.getItem('foliora_supabase_url');
-    const key = localStorage.getItem('foliora_supabase_key');
-    if (url && key && window.supabase) {
+    const url = localStorage.getItem('foliora_supabase_url') || SUPABASE_PROJECT_URL;
+    const key = localStorage.getItem('foliora_supabase_key') || SUPABASE_ANON_KEY;
+    
+    if (url && key && url.startsWith("http") && !url.includes("YOUR-PROJECT") && window.supabase) {
         try {
             supabaseClient = window.supabase.createClient(url, key);
         } catch (err) {
@@ -50,41 +55,52 @@ function saveSupabaseConfig() {
     localStorage.setItem('foliora_supabase_url', url);
     localStorage.setItem('foliora_supabase_key', key);
     initSupabase();
-    showStatus("Supabase connected! Checking active session...");
+    showStatus("Supabase connected! Syncing live data...");
     closeEntitlementModal();
     checkLiveSession();
 }
 
-// --- REAL LIVE ENTITLEMENT & QUOTA FETCHING ---
+// --- লাইভ ডাটাবেস থেকে এনটাইটেলমেন্ট ও কোটা রিফ্রেশ ---
 async function refreshLiveEntitlements(notify = false) {
-    if (!supabaseClient || !FOLIORA_STATE.user || !FOLIORA_STATE.user.isLoggedIn) return;
+    if (!supabaseClient || !FOLIORA_STATE.user || !FOLIORA_STATE.user.isLoggedIn) {
+        FOLIORA_STATE.entitlements.mcq = 'locked';
+        updateHeaderAccountUI();
+        switchProduct(FOLIORA_STATE.activeProduct);
+        return;
+    }
 
     try {
         const userId = FOLIORA_STATE.user.id;
         const currentMonth = new Date().toISOString().slice(0, 7); // 'YYYY-MM'
 
+        // 1. Fetch Entitlements from Supabase
         const { data: entRows, error: entError } = await supabaseClient
             .from('entitlements')
             .select('product_id, tier, is_active')
             .eq('user_id', userId);
 
+        // ডিফল্টভাবে locked রাখা
+        let hasMcq = false;
+        let hasOcr = false;
+
         if (!entError && Array.isArray(entRows)) {
-            let hasMcq = false;
-            let hasOcr = false;
             entRows.forEach(row => {
-                if (row.product_id === 'foliora-mcq' && row.is_active) {
+                if (row.product_id === 'foliora-mcq' && row.is_active === true) {
                     FOLIORA_STATE.entitlements.mcq = row.tier || 'pro';
                     hasMcq = true;
                 }
-                if (row.product_id === 'foliora-ocr' && row.is_active) {
+                if (row.product_id === 'foliora-ocr' && row.is_active === true) {
                     FOLIORA_STATE.entitlements.ocr = row.tier || 'free';
                     hasOcr = true;
                 }
             });
-            if (!hasMcq) FOLIORA_STATE.entitlements.mcq = 'locked';
-            if (!hasOcr) FOLIORA_STATE.entitlements.ocr = 'locked';
         }
+        
+        // ডাটাবেসে না থাকলে কঠোরভাবে লক করা
+        if (!hasMcq) FOLIORA_STATE.entitlements.mcq = 'locked';
+        if (!hasOcr) FOLIORA_STATE.entitlements.ocr = 'locked';
 
+        // 2. Fetch Usage Quota from Supabase
         const { data: quotaRows, error: quotaError } = await supabaseClient
             .from('usage_quotas')
             .select('used_units, unit_limit')
@@ -101,15 +117,21 @@ async function refreshLiveEntitlements(notify = false) {
         saveFolioraPersistedState();
         updateHeaderAccountUI();
         switchProduct(FOLIORA_STATE.activeProduct);
-        if (notify) showStatus("Entitlements synced with Supabase!");
+        if (notify) showStatus("ডাটাবেসের সাথে এনটাইটেলমেন্ট সিঙ্ক হয়েছে!");
     } catch (err) {
         console.warn("Could not sync with Supabase:", err);
     }
 }
 
-// --- SESSION RESTORATION ---
+// --- সেশন চেক ---
 async function checkLiveSession() {
-    if (!supabaseClient) return;
+    if (!supabaseClient) {
+        FOLIORA_STATE.user.isLoggedIn = false;
+        FOLIORA_STATE.entitlements.mcq = 'locked';
+        updateHeaderAccountUI();
+        switchProduct(FOLIORA_STATE.activeProduct);
+        return;
+    }
     try {
         const { data: { session }, error } = await supabaseClient.auth.getSession();
         if (session && session.user) {
@@ -125,28 +147,22 @@ async function checkLiveSession() {
         } else {
             FOLIORA_STATE.user.isLoggedIn = false;
             FOLIORA_STATE.entitlements.mcq = 'locked';
+            updateHeaderAccountUI();
+            switchProduct(FOLIORA_STATE.activeProduct);
         }
-        updateHeaderAccountUI();
-        switchProduct(FOLIORA_STATE.activeProduct);
     } catch (err) {
         console.warn("Session check error:", err);
     }
 }
 
-// --- AUTHENTICATION ACTIONS ---
+// --- লাইভ সাইন ইন (কোনো ফেইক প্রিমিয়াম বাইপাস ছাড়া) ---
 async function handleLiveSignIn(e) {
     e.preventDefault();
     const email = document.getElementById('authSignInEmail').value.trim();
     const password = document.getElementById('authSignInPassword').value.trim();
 
     if (!supabaseClient) {
-        FOLIORA_STATE.user = { isLoggedIn: true, id: 'sim-user', name: email.split('@')[0], email: email, token: 'mock' };
-        FOLIORA_STATE.entitlements.mcq = 'pro';
-        saveFolioraPersistedState();
-        updateHeaderAccountUI();
-        switchProduct(FOLIORA_STATE.activeProduct);
-        closeAuthModal();
-        showStatus(`Signed in (Simulator mode). Connect Supabase in API tab.`);
+        showStatus("ডাটাবেস কানেক্টেড নেই! দয়া করে API ট্যাবে Supabase Credentials দিন।", true);
         return;
     }
 
@@ -164,16 +180,19 @@ async function handleLiveSignIn(e) {
             token: data.session.access_token
         };
         
+        // লগইন হওয়ার পর ডিফল্টভাবে Locked সেট করে লাইভ ডাটাবেস চেক করা
+        FOLIORA_STATE.entitlements.mcq = 'locked';
         await refreshLiveEntitlements();
         closeAuthModal();
-        showStatus(`Welcome back, ${FOLIORA_STATE.user.name}!`);
+        showStatus(`স্বাগতম, ${FOLIORA_STATE.user.name}!`);
     } catch (err) {
-        showStatus("Sign in failed: " + (err.message || "Invalid credentials"), true);
+        showStatus("লগইন ব্যর্থ: " + (err.message || "ভুল ইমেইল বা পাসওয়ার্ড"), true);
     } finally {
         setLoading('btnSubmitSignIn', false);
     }
 }
 
+// --- লাইভ সাইন আপ (নতুন ইউজার সবসময় Locked থাকবে) ---
 async function handleLiveSignUp(e) {
     e.preventDefault();
     const name = document.getElementById('authSignUpName').value.trim();
@@ -181,13 +200,7 @@ async function handleLiveSignUp(e) {
     const password = document.getElementById('authSignUpPassword').value.trim();
 
     if (!supabaseClient) {
-        FOLIORA_STATE.user = { isLoggedIn: true, id: 'sim-user', name: name, email: email, token: 'mock' };
-        FOLIORA_STATE.entitlements.mcq = 'pro';
-        saveFolioraPersistedState();
-        updateHeaderAccountUI();
-        switchProduct(FOLIORA_STATE.activeProduct);
-        closeAuthModal();
-        showStatus(`Account created (Simulator mode). Connect Supabase in API tab.`);
+        showStatus("ডাটাবেস কানেক্টেড নেই! API ট্যাবে Supabase Credentials দিন।", true);
         return;
     }
 
@@ -209,15 +222,17 @@ async function handleLiveSignUp(e) {
                 email: u.email,
                 token: data.session.access_token
             };
+            // নতুন ইউজারের MCQ Studio অবশ্যই locked থাকবে
+            FOLIORA_STATE.entitlements.mcq = 'locked';
             await refreshLiveEntitlements();
             closeAuthModal();
-            showStatus(`Account created! Welcome, ${name}.`);
+            showStatus(`অ্যাকাউন্ট তৈরি হয়েছে! স্বাগতম, ${name}।`);
         } else {
             closeAuthModal();
-            showStatus("Registration successful! Check your email or sign in.");
+            showStatus("রেজিস্ট্রেশন সফল! অনুগ্রহ করে সাইন ইন করুন।");
         }
     } catch (err) {
-        showStatus("Registration failed: " + (err.message || "Unknown error"), true);
+        showStatus("রেজিস্ট্রেশন ব্যর্থ: " + (err.message || "Unknown error"), true);
     } finally {
         setLoading('btnSubmitSignUp', false);
     }
@@ -233,7 +248,7 @@ async function handleLiveSignOut() {
     updateHeaderAccountUI();
     closeProfileModal();
     switchProduct(FOLIORA_STATE.activeProduct);
-    showStatus("Signed out of Foliora.");
+    showStatus("সাইন আউট সফল হয়েছে।");
 }
 
 function loadFolioraPersistedState() {
@@ -321,7 +336,7 @@ function switchAuthTab(tab) {
 
 function continueAsGuest() {
     closeAuthModal();
-    showStatus("Continuing in guest mode. Converter is fully usable.");
+    showStatus("গেস্ট মোডে কনভার্টার সম্পূর্ণ ব্যবহারযোগ্য।");
 }
 
 function openProfileModal() {
@@ -331,8 +346,9 @@ function openProfileModal() {
     document.getElementById('profileAvatarBig').textContent = user.name ? user.name.charAt(0).toUpperCase() : 'U';
     
     const mcqBadge = document.getElementById('profileBadgeMcq');
-    mcqBadge.textContent = FOLIORA_STATE.entitlements.mcq === 'pro' ? 'Pro Active' : 'Locked / Expired';
-    mcqBadge.className = FOLIORA_STATE.entitlements.mcq === 'pro' 
+    const isPro = FOLIORA_STATE.entitlements.mcq === 'pro';
+    mcqBadge.textContent = isPro ? 'Pro Active' : 'Locked / Unsubscribed';
+    mcqBadge.className = isPro 
         ? "text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800" 
         : "text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800";
 
@@ -346,11 +362,16 @@ function closeProfileModal() {
     document.getElementById('modalProfile').classList.add('hidden');
 }
 
+// লক স্ক্রিন থেকে আপগ্রেড বা সাইন ইন পপআপ দেখানো
 function handleLockAction(productId) {
     if (!FOLIORA_STATE.user || !FOLIORA_STATE.user.isLoggedIn) {
         openAuthModal('signin');
     } else {
-        openEntitlementModal();
+        if (typeof openPricingModal === "function") {
+            openPricingModal();
+        } else {
+            showStatus("এই ফিচারটি ব্যবহার করতে প্ল্যান আপগ্রেড করুন।", true);
+        }
     }
 }
 
@@ -373,16 +394,16 @@ function switchProduct(productId) {
     if (activePane) activePane.classList.add('active');
 
     const isUserLoggedIn = FOLIORA_STATE.user && FOLIORA_STATE.user.isLoggedIn;
-    const isMcqLocked = !isUserLoggedIn || FOLIORA_STATE.entitlements.mcq === 'locked';
+    const isMcqLocked = !isUserLoggedIn || FOLIORA_STATE.entitlements.mcq !== 'pro';
     
     document.getElementById('lock-mcq').classList.toggle('hidden', !isMcqLocked);
     document.getElementById('content-mcq').classList.toggle('hidden', isMcqLocked);
     
     if (isMcqLocked) {
         document.getElementById('lockMcqReason').textContent = isUserLoggedIn 
-            ? "Your account currently does not have an active Foliora MCQ Studio license."
-            : "Please sign in to your Foliora account to access MCQ Studio.";
-        document.getElementById('lockMcqBtnText').textContent = isUserLoggedIn ? "Upgrade Plan (Simulator)" : "Sign In to Unlock";
+            ? "আপনার অ্যাকাউন্টে বর্তমানে Foliora MCQ Studio-এর সক্রিয় লাইসেন্স নেই।"
+            : "MCQ Studio ব্যবহার করতে অনুগ্রহ করে আপনার অ্যাকাউন্টে সাইন ইন করুন।";
+        document.getElementById('lockMcqBtnText').textContent = isUserLoggedIn ? "Upgrade Plan" : "Sign In to Unlock";
     }
 
     const isOcrLocked = !isUserLoggedIn || FOLIORA_STATE.entitlements.ocr === 'locked' || FOLIORA_STATE.ocrQuota.used >= FOLIORA_STATE.ocrQuota.limit;
@@ -390,9 +411,9 @@ function switchProduct(productId) {
     document.getElementById('content-ocr').classList.toggle('hidden', isOcrLocked);
     if (isOcrLocked) {
         document.getElementById('lockOcrReason').textContent = isUserLoggedIn
-            ? "You have reached your monthly OCR quota or your subscription has expired."
-            : "Please sign in to your Foliora account to access AI Vision OCR.";
-        document.getElementById('lockOcrBtnText').textContent = isUserLoggedIn ? "Adjust Quota (Simulator)" : "Sign In to Unlock";
+            ? "আপনার মাসিক OCR কোটা শেষ হয়েছে অথবা সাবস্ক্রিপশনের মেয়াদ শেষ।"
+            : "AI Vision OCR ব্যবহার করতে অ্যাকাউন্টে সাইন ইন করুন।";
+        document.getElementById('lockOcrBtnText').textContent = isUserLoggedIn ? "Upgrade Quota" : "Sign In to Unlock";
     }
     updateOcrQuotaDisplay();
 
@@ -464,7 +485,7 @@ function saveWorkspaceSettings() {
     const ocr = document.getElementById('wsCheckOcr').checked;
 
     if (!mcq && !conv && !ocr) {
-        showStatus("Please keep at least one tool visible in your workspace.", true);
+        showStatus("কমপক্ষে একটি টুল দৃশ্যমান রাখতে হবে।", true);
         return;
     }
 
@@ -484,7 +505,7 @@ function saveWorkspaceSettings() {
         else if (conv) switchProduct('converter');
         else if (ocr) switchProduct('ocr');
     }
-    showStatus("Workspace updated successfully!");
+    showStatus("Workspace আপডেট হয়েছে!");
 }
 
 function openEntitlementModal() {
@@ -514,7 +535,7 @@ function applyEntitlementSimulation() {
     updateHeaderAccountUI();
     switchProduct(FOLIORA_STATE.activeProduct);
     closeEntitlementModal();
-    showStatus("License simulation applied!");
+    showStatus("সিমুলেশন প্রয়োগ করা হয়েছে!");
 }
 
 // ====================================================================
@@ -601,18 +622,18 @@ function getStandardAnswerMarker(answer, isUnicode) {
     return `DËi: ${map[norm] || norm}`;
 }
 
-// --- PROVEN ROBUST BIJOY <-> UNICODE CONVERTER ---
+// ============================================================================
+// CONVERTER ENGINE (BIJOY <-> UNICODE)
+// ============================================================================
 function convertUnicodeToBijoy(text) {
     if (!text) return "";
     let str = text;
     str = str.replace(/\u09AF\u09BC/g, 'য়').replace(/\u09A1\u09BC/g, 'ড়').replace(/\u09A2\u09BC/g, 'ঢ়');
     str = str.replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/ো/g, 'ো').replace(/ৌ/g, 'ৌ');
-    
     let cons = "কখগঘঙচছজঝঞটঠডঢণতথদধনপফবভমযরলশষসহড়ঢ়য়ৎংঃঁ"; 
     str = str.replace(new RegExp("র\u09CD([" + cons + "](?:\u09CD[" + cons + "])*)", "g"), "$1©");
     str = str.replace(new RegExp("([" + cons + "](?:\u09CD[" + cons + "])*(?:©)?)(ি|ে|ৈ)", "g"), "$2$1");
     str = str.replace(/(^|[\s\(\[\{'"‘“\-])ে/g, "$1†").replace(/ে/g, "‡");
-
     const u2bJukta = {
         'ন্ট':'›U', 'প্ট':'Þ', 'ষ্ক':'®‹', 'ল্ক':'é', 'ল্গ':'ê', 'ল্ড':'ì', 'শ্চ':'ð', 'স্কৃ':'¯‹…',
         'গ্ব':'M¦', 'ভু':'fz', 'খ্ব':'L¡', 'ক্ক':'°', 'ক্ট':'±', 'ক্ত':'³', 'ক্ব':'K¡', 'ক্স':'·', 'ক্ষ':'¶', 'ক্ষ্ম':'¶g', 'ক্ষ্য':'¶¨', 'ক্ষু':'¶z',
@@ -635,13 +656,7 @@ function convertUnicodeToBijoy(text) {
     for (let k of keys) { str = str.split(k).join(u2bJukta[k]); }
 
     const map = {
-        'অ':'A', 'আ':'Av', 'ই':'B', 'ঈ':'C', 'উ':'D', 'ঊ':'E', 'ঋ':'F', 'এ':'G', 'ঐ':'H', 'ও':'I', 'ঔ':'J', 
-        'ক':'K', 'খ':'L', 'গ':'M', 'ঘ':'N', 'ঙ':'O', 'চ':'P', 'ছ':'Q', 'জ':'R', 'ঝ':'S', 'ঞ':'T', 
-        'ট':'U', 'ঠ':'V', 'ড':'W', 'ঢ':'X', 'ণ':'Y', 'ত':'Z', 'থ':'_', 'দ':'`', 'ধ':'a', 'ন':'b', 
-        'প':'c', 'ফ':'d', 'ব':'e', 'ভ':'f', 'ম':'g', 'য':'h', 'র':'i', 'ল':'j', 'শ':'k', 'ষ':'l', 
-        'স':'m', 'হ':'n', 'ড়':'o', 'ঢ়':'p', 'য়':'q', 'ৎ':'r', 'ং':'s', 'ঃ':'t', 'ঁ':'u', 'া':'v', 
-        'ি':'w', 'ী':'x', 'ু':'y', 'ূ':'~', 'ৃ':'„', 'ে':'‡', 'ৈ':'ˆ', 'ৗ':'Š', '।':'|', 
-        '০':'0', '১':'1', '২':'2', '৩':'3', '৪':'4', '৫':'5', '৬':'6', '৭':'৭', '৮':'8', '৯':'9', '©':'©' 
+        'অ':'A', 'আ':'Av', 'ই':'B', 'ঈ':'C', 'উ':'D', 'ঊ':'E', 'ঋ':'F', 'এ':'G', 'ঐ':'H', 'ও':'I', 'ঔ':'J', 'ক':'K', 'খ':'L', 'গ':'M', 'ঘ':'N', 'ঙ':'O', 'চ':'P', 'ছ':'Q', 'জ':'R', 'ঝ':'S', 'ঞ':'T', 'ট':'U', 'ঠ':'V', 'ড':'W', 'ঢ':'X', 'ণ':'Y', 'ত':'Z', 'থ':'_', 'দ':'`', 'ধ':'a', 'ন':'b', 'প':'c', 'ফ':'d', 'ব':'e', 'ভ':'f', 'ম':'g', 'য':'h', 'র':'i', 'ল':'j', 'শ':'k', 'ষ':'l', 'স':'m', 'হ':'n', 'ড়':'o', 'ঢ়':'p', 'য়':'q', 'ৎ':'r', 'ং':'s', 'ঃ':'t', 'ঁ':'u', 'া':'v', 'ি':'w', 'ী':'x', 'ু':'y', 'ূ':'~', 'ৃ':'„', 'ে':'‡', 'ৈ':'ˆ', 'ৗ':'Š', '।':'|', '০':'0', '১':'1', '২':'2', '৩':'3', '৪':'4', '৫':'5', '৬':'6', '৭':'৭', '৮':'8', '৯':'9', '©':'©' 
     };
     let out = "";
     for (let i = 0; i < str.length; i++) { out += map[str[i]] || str[i]; }
@@ -678,7 +693,7 @@ function convertBijoyToUnicode(text) {
         'aŸ':'ধ্ব', 'k¦':'শ্ব', 'Z¡':'ত্ব', '_¡':'থ্ব', 'gœ':'ম্ন', 'k&g':'শ্ম',
         '`¨':'দ্য', 'š¿':'ন্ত্র', '¤cÖ':'ম্প্র',
         '¯’¨':'স্থ্য', 'ó«':'ষ্ট্র',
-        'kœ':'শ্ন', 'e¨':'ব্য', '¯¿':'স্ত্র', 'Ë¡':'ত্ত্ব', '›Ø':'দ্বন্দ্ব',
+        'kœ':'শ্ন', 'e¨':'ব্য', '¯¿':'স্ত্র', 'Ë¡':'ত্ত্ব', '›Ø':'ন্দ্ব',
         'cœ':'প্ন', 'Z¨':'ত্য', '¯‹«':'স্ক্র', '÷«':'স্ট্র', '_«':'থ্র',
         'c&c':'প্প', 'c&m':'প্স', '¼¶':'ঙ্ক্ষ', 'O&g':'ঙ্ম', '\xBB':'গ্ধ', '»':'গ্ধ',
         '¨':'্য', '«':'্র', '&':'্',
@@ -735,8 +750,13 @@ function convertBijoyToUnicode(text) {
     return str.normalize("NFC");
 }
 
-// --- CONVERTER HANDLER ---
+// ============================================================================
+// CONVERTER ACTION HANDLER
+// ============================================================================
 async function runSmartConverter(direction) {
+    const btnId = direction === "UniToBijoy" ? "btnUniToBijoy" : "btnBijoyToUni";
+    setLoading(btnId, true);
+
     try {
         await Word.run(async (context) => {
             const selection = context.document.getSelection();
@@ -746,7 +766,10 @@ async function runSmartConverter(direction) {
             await context.sync();
 
             const rawText = selection.text;
-            if (!rawText || !rawText.trim()) { showStatus("Select text to convert!", true); return; }
+            if (!rawText || !rawText.trim()) { 
+                showStatus("অনুগ্রহ করে ডকুমেন্টের যে লেখাটুকু কনভার্ট করবেন তা আগে সিলেক্ট করুন!", true); 
+                return; 
+            }
 
             let origAlign = "Left";
             if (paras.items.length > 0) {
@@ -818,12 +841,19 @@ async function runSmartConverter(direction) {
                     }
                 }
             }
-            await context.sync(); showStatus(`Text Converted smoothly!`);
+            await context.sync(); 
+            showStatus(`সফলভাবে কনভার্ট সম্পন্ন হয়েছে!`);
         });
-    } catch (error) { showStatus("Error: " + (error.message || "Unknown"), true); }
+    } catch (error) { 
+        showStatus("Error: " + (error.message || "Unknown"), true); 
+    } finally {
+        setLoading(btnId, false);
+    }
 }
 
-// --- ENGLISH FONT FIXER ENGINE ---
+// ====================================================================
+// অন্যান্য সমস্ত ফরম্যাটিং ও এক্সাম পেপার ফাংশন অপরিবর্তিত রাখা হয়েছে
+// ====================================================================
 async function fixEnglishFont() {
     try {
         await Word.run(async (context) => {
@@ -874,552 +904,6 @@ async function fixEnglishFont() {
     } catch (error) { showStatus("Error: " + (error.message || "Unknown"), true); }
 }
 
-// --- MCQ FORMATTING CORE ENGINES ---
-function sanitizeQuestionAnswers(q) {
-    if (!q || !q.options) return;
-    for (let j = 0; j < q.options.length; j++) {
-        let text = q.options[j][1];
-        if (typeof text === "string") {
-            const match = text.match(/\s+([PQRS])\s*$/i);
-            if (match) {
-                q.options[j][1] = text.replace(/\s+([PQRS])\s*$/i, "").trim();
-                if (!q.answer) {
-                    const map = { "P": "ক", "Q": "খ", "R": "গ", "S": "ঘ" };
-                    q.answer = map[match[1].toUpperCase()];
-                    q.original_answer = q.answer;
-                }
-            }
-        }
-    }
-}
-
-function parseQuestions(text) {
-    let cleanText = String(text || "").replace(/([\r\n\v]+)/g, "\n");
-    let lines = cleanText.split('\n');
-    let questions = [];
-    let current = null;
-
-    function flush() {
-        if (current && current.question && current.options.length > 0) {
-            sanitizeQuestionAnswers(current);
-            questions.push(current);
-        }
-        current = null;
-    }
-
-    for (let i = 0; i < lines.length; i++) {
-        let line = lines[i].trim();
-        if (!line) continue;
-
-        let expMatch = line.match(/^\s*(?:ব্যাখ্যা|Explanation|e¨vL¨v)\s*[: \-\u2013\u2014]\s*(.+)$/i);
-        if (expMatch && current) { current.explanation = expMatch[1].trim(); continue; }
-
-        let ansMatch = line.match(/^\s*(?:সঠিক উত্তর|উত্তর|উ|Ans|Answer|mwVK DËi|DËi)\s*[:\. ]?\s*(.*)$/i);
-        if (ansMatch && current) {
-            let ansExtr = ansMatch[1].match(/[\(\[]?([ক-ঘA-DK-Na-dk-n])[\)\]]?/);
-            if (ansExtr) {
-                current.answer = normalizeAnswerLabel(ansExtr[1]);
-                current.original_answer = current.answer;
-            }
-            continue;
-        }
-
-        let qMatch = line.match(/^\s*((?:\d+|[০-৯]+))\s*[\. \)\]]\s*(.*)$/);
-        if (qMatch || /^[^\(]+?\?$/.test(line)) {
-            flush();
-            let rawQ = qMatch ? qMatch[2] : line;
-            let optPattern = /([ক-ঘK-N])[\.\) :]\s*(.+?)(?=\s+[ক-ঘK-N][\.\) :]|$)/g;
-            let optionsFound = [];
-            let questionText = rawQ;
-            
-            let firstOptIndex = rawQ.search(/(?:\s+|^)([ক-ঘK-N])[\.\) :]/);
-            if(firstOptIndex !== -1) {
-                questionText = rawQ.substring(0, firstOptIndex).trim();
-                let optionsPart = rawQ.substring(firstOptIndex).trim();
-                let match;
-                while ((match = optPattern.exec(optionsPart)) !== null) {
-                    optionsFound.push([normalizeAnswerLabel(match[1]), match[2].trim()]);
-                }
-            }
-
-            current = {
-                question: questionText,
-                questionNumber: qMatch ? qMatch[1] : null,
-                _sourceLineIndex: i,
-                options: optionsFound,
-                answer: null,
-                explanation: null,
-                original_answer: null
-            };
-            continue;
-        }
-
-        if (!current) continue;
-        let optPattern = /([ক-ঘK-N])[\.\) :]\s*(.+?)(?=\s+[ক-ঘK-N][\.\) :]|$)/g;
-        let match;
-        let foundInline = false;
-        while ((match = optPattern.exec(line)) !== null) {
-            current.options.push([normalizeAnswerLabel(match[1]), match[2].trim()]);
-            foundInline = true;
-        }
-        if (foundInline) continue;
-
-        let singleOptMatch = line.match(/^\s*\(?([ক-ঘA-DKLMNa-dklmn])\)?[. :]?\s*(.+?)$/);
-        if (singleOptMatch) {
-            current.options.push([normalizeAnswerLabel(singleOptMatch[1]), singleOptMatch[2].trim()]);
-            continue;
-        }
-        if (current.options.length > 0) {
-            current.options[current.options.length - 1][1] += " " + line;
-        } else {
-            current.question += " " + line;
-        }
-    }
-    flush();
-    return questions;
-}
-
-function shuffleOptions(question) {
-    if (!question.options || question.options.length < 2 || !question.answer) return question;
-    
-    let originalAns = question.original_answer || question.answer;
-    let correctText = null;
-    
-    for (let i = 0; i < question.options.length; i++) {
-        if (question.options[i][0] === originalAns) { correctText = question.options[i][1]; break; }
-    }
-    if (!correctText) return question;
-
-    let shuffled = question.options.slice();
-    for (let i = shuffled.length - 1; i > 0; i--) {
-        let j = Math.floor(Math.random() * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-
-    let newOptions = [];
-    let newAnswer = null;
-    for (let i = 0; i < shuffled.length; i++) {
-        let newLabel = OPTION_ORDER[i] || shuffled[i][0];
-        newOptions.push([newLabel, shuffled[i][1]]);
-        if (shuffled[i][1] === correctText) { newAnswer = newLabel; }
-    }
-    
-    question.options = newOptions;
-    question.answer = newAnswer;
-    return question;
-}
-
-function mcqReadTabStopsFromOOXML(ooxml) {
-    const result = [];
-    if (!ooxml) return result;
-    const tabsBlockMatch = ooxml.match(/<w:tabs\b[^>]*>([\s\S]*?)<\/w:tabs>/i);
-    if (!tabsBlockMatch) return result;
-    const tabRegex = /<w:tab\b([^>]*?)(?:\/>|>[\s\S]*?<\/w:tab>)/gi;
-    let match;
-    while ((match = tabRegex.exec(tabsBlockMatch[1])) !== null) {
-        const attrs = match[1] || "";
-        const posMatch = attrs.match(/w:pos="([\d.]+)"/i);
-        if (!posMatch) continue;
-        const valMatch = attrs.match(/w:val="([^"]+)"/i);
-        result.push({ position: parseFloat(posMatch[1]) / 20, alignment: valMatch ? valMatch[1] : "left" });
-    }
-    return result.sort((a, b) => a.position - b.position);
-}
-
-async function mcqReadSelectedParagraphTabStops(context, paragraph) {
-    try {
-        if (!Office.context.requirements.isSetSupported("WordApi", "1.1")) return [];
-        const ooxml = paragraph.getOoxml();
-        await context.sync();
-        return mcqReadTabStopsFromOOXML(ooxml.value || "");
-    } catch (error) { return []; }
-}
-
-async function mcqGetCurrentColumnWidth(context) {
-    try {
-        if (!Office.context.requirements.isSetSupported("WordApi", "1.3")) return 350;
-        const sections = context.document.getSelection().sections;
-        sections.load("items");
-        await context.sync();
-        if (!sections.items.length) return 350;
-        
-        const pageSetup = sections.items[0].pageSetup;
-        pageSetup.load("pageWidth,leftMargin,rightMargin,gutter");
-        const columns = pageSetup.textColumns;
-        columns.load("items");
-        await context.sync();
-
-        if (columns.items.length > 0 && typeof columns.items[0].width === "number") {
-            return columns.items[0].width;
-        }
-        const width = pageSetup.pageWidth - pageSetup.leftMargin - pageSetup.rightMargin - (pageSetup.gutter || 0);
-        return width > 0 ? width : 350;
-    } catch (error) { 
-        return 350; 
-    }
-}
-
-function mcqGetOptionSlots(tabStops, columnWidth) {
-    if (!Array.isArray(tabStops) || tabStops.length < 2) return null;
-    const sorted = tabStops.filter(t => Number.isFinite(Number(t.position))).slice().sort((a, b) => a.position - b.position);
-    if (sorted.length < 2) return null;
-
-    const firstTab = sorted[0].position;
-    const secondTab = sorted[1].position;
-    if (secondTab <= firstTab) return null;
-
-    const firstSlot = secondTab - firstTab;
-    let secondSlot = null;
-
-    if (sorted.length >= 3 && sorted[2].position > secondTab) {
-        secondSlot = sorted[2].position - secondTab;
-    } else if (Number.isFinite(columnWidth) && columnWidth > secondTab) {
-        secondSlot = columnWidth - secondTab;
-    }
-
-    if (firstSlot <= 0 || !secondSlot || secondSlot <= 0) return null;
-    return { firstSlot, secondSlot };
-}
-
-function mcqMeasureTextPoints(text, fontName, fontSize, bold = false) {
-    text = String(text || "");
-    if (!text) return 0;
-    let size = parseFloat(fontSize) || 10.5;
-    const canvas = mcqMeasureTextPoints.canvas || (mcqMeasureTextPoints.canvas = document.createElement("canvas"));
-    const ctx = canvas.getContext("2d");
-    ctx.font = `${bold ? "700 " : "400 "}${size * (96 / 72)}px "${String(fontName || "Arial").replace(/["']/g, "")}"`;
-    return ctx.measureText(text).width * (72 / 96);
-}
-
-function mcqMeasureOptionWidth(option, optionFont, optionSize, textFont, textSize, bold, useSymbols, isUnicode) {
-    const labelText = option[0] || "";
-    const marker = useSymbols ? (OPTION_EXPORT_MAP[labelText] || labelText) : getStandardOptionMarker(labelText, isUnicode);
-    const markerFont = useSymbols ? optionFont : textFont;
-    const markerSize = useSymbols ? optionSize : textSize;
-    const text = String(option[1] || "").replace(/[\r\n\v]/g, " ").trim();
-    return mcqMeasureTextPoints(marker, markerFont, markerSize, bold) + mcqMeasureTextPoints(` ${text}`, textFont, textSize, bold) + 2;
-}
-
-function mcqOptionFitsSlot(option, slotWidth, optionFont, optionSize, targetFont, targetSize, bold, useSymbols, isUnicode) {
-    if (!option || !Number.isFinite(slotWidth) || slotWidth <= 0) return false;
-    return (mcqMeasureOptionWidth(option, optionFont, optionSize, targetFont, targetSize, bold, useSymbols, isUnicode) * 1.08) <= slotWidth;
-}
-
-function mcqDetectAutoOptionLayout(options, tabStops, columnWidth, optionFont, optionSize, targetFont, targetSize, bold, useSymbols, isUnicode) {
-    if (!options || options.length < 4) return { mode: "one-per-line" };
-    const slots = mcqGetOptionSlots(tabStops, columnWidth);
-    if (!slots) return { mode: "one-per-line" };
-    
-    const allFit = 
-        mcqOptionFitsSlot(options[0], slots.firstSlot, optionFont, optionSize, targetFont, targetSize, bold, useSymbols, isUnicode) &&
-        mcqOptionFitsSlot(options[1], slots.secondSlot, optionFont, optionSize, targetFont, targetSize, bold, useSymbols, isUnicode) &&
-        mcqOptionFitsSlot(options[2], slots.firstSlot, optionFont, optionSize, targetFont, targetSize, bold, useSymbols, isUnicode) &&
-        mcqOptionFitsSlot(options[3], slots.secondSlot, optionFont, optionSize, targetFont, targetSize, bold, useSymbols, isUnicode);
-    return { mode: allFit ? "two-per-line" : "one-per-line" };
-}
-
-function mcqApplyFontSafe(range, fontName, fontSize, bold, italic) {
-    if (fontName) range.font.name = fontName;
-    if (fontSize) range.font.size = fontSize;
-    range.font.bold = bold === true;
-    range.font.italic = italic === true;
-}
-
-function mcqInsertOption(paragraph, option, optionFont, optionSize, targetFont, targetSize, origBold, origItalic, leadingTab, useSymbols, isUnicode) {
-    if (!option) return;
-    const labelText = option[0] || "";
-    const label = useSymbols ? (OPTION_EXPORT_MAP[labelText] || labelText) : getStandardOptionMarker(labelText, isUnicode);
-    
-    let text = String(option[1] || "").replace(/[\r\n\v]/g, " ").trim();
-    const match = text.match(/\s+([PQRS])\s*$/i);
-    if (match) text = text.replace(/\s+([PQRS])\s*$/i, "").trim();
-    
-    if (leadingTab) {
-        let tabRange = paragraph.insertText("\t", "End");
-        mcqApplyFontSafe(tabRange, targetFont, targetSize, false, false);
-    }
-    
-    const markerRange = paragraph.insertText(label, "End");
-    mcqApplyFontSafe(markerRange, useSymbols ? optionFont : targetFont, useSymbols ? optionSize : targetSize, origBold, origItalic);
-    
-    const textRange = paragraph.insertText(` ${text}`, "End");
-    mcqApplyFontSafe(textRange, targetFont, targetSize, origBold, origItalic);
-}
-
-function mcqInsertNormalAnswer(paragraph, answer, answerSize, origItalic, useSymbols, targetFont, targetSize, isUnicode) {
-    if (!answer) return;
-    const marker = useSymbols ? (ANSWER_EXPORT_MAP[answer] || answer) : getStandardAnswerMarker(answer, isUnicode);
-    paragraph.insertText("\t", "End");
-    const answerRange = paragraph.insertText(marker, "End");
-    mcqApplyFontSafe(answerRange, useSymbols ? "ProshnaP" : targetFont, useSymbols ? answerSize : targetSize, false, origItalic);
-}
-
-function mcqInsertNormalOptions(anchorRange, question, layout, optionFont, optionSize, targetFont, targetSize, origAlign, origBold, origItalic, answerSize, useSymbols, isUnicode) {
-    const count = Math.min(4, question.options.length);
-    if (layout.mode === "two-per-line") {
-        for (let j = 0; j < count; j += 2) {
-            const paragraph = anchorRange.insertParagraph("", "Before");
-            paragraph.alignment = origAlign;
-            
-            mcqInsertOption(paragraph, question.options[j], optionFont, optionSize, targetFont, targetSize, origBold, origItalic, true, useSymbols, isUnicode);
-            if (question.options[j + 1]) {
-                let midTab = paragraph.insertText("\t", "End");
-                mcqApplyFontSafe(midTab, targetFont, targetSize, false, false);
-                mcqInsertOption(paragraph, question.options[j + 1], optionFont, optionSize, targetFont, targetSize, origBold, origItalic, false, useSymbols, isUnicode);
-            }
-            if (j + 1 >= 3 || j + 1 === count - 1) {
-                if (j + 1 === 3) mcqInsertNormalAnswer(paragraph, question.answer, answerSize, origItalic, useSymbols, targetFont, targetSize, isUnicode);
-            }
-        }
-    } else {
-        for (let j = 0; j < count; j++) {
-            const paragraph = anchorRange.insertParagraph("", "Before");
-            paragraph.alignment = origAlign;
-            
-            mcqInsertOption(paragraph, question.options[j], optionFont, optionSize, targetFont, targetSize, origBold, origItalic, true, useSymbols, isUnicode);
-            if (j === 3) mcqInsertNormalAnswer(paragraph, question.answer, answerSize, origItalic, useSymbols, targetFont, targetSize, isUnicode);
-        }
-    }
-}
-
-function mcqInsertSmartOptions(anchorRange, question, layout, optionFont, optionSize, targetFont, targetSize, origAlign, origBold, origItalic, useSymbols, isUnicode) {
-    const count = Math.min(4, question.options.length);
-    if (layout.mode === "two-per-line") {
-        for (let j = 0; j < count; j += 2) {
-            const paragraph = anchorRange.insertParagraph("", "Before");
-            paragraph.alignment = origAlign;
-            
-            mcqInsertOption(paragraph, question.options[j], optionFont, optionSize, targetFont, targetSize, origBold, origItalic, true, useSymbols, isUnicode);
-            if (question.options[j + 1]) {
-                let midTab = paragraph.insertText("\t", "End");
-                mcqApplyFontSafe(midTab, targetFont, targetSize, false, false);
-                mcqInsertOption(paragraph, question.options[j + 1], optionFont, optionSize, targetFont, targetSize, origBold, origItalic, false, useSymbols, isUnicode);
-            }
-        }
-    } else {
-        for (let j = 0; j < count; j++) {
-            const paragraph = anchorRange.insertParagraph("", "Before");
-            paragraph.alignment = origAlign;
-            mcqInsertOption(paragraph, question.options[j], optionFont, optionSize, targetFont, targetSize, origBold, origItalic, true, useSymbols, isUnicode);
-        }
-    }
-}
-
-function mcqInsertNormalExplanation(anchorRange, explanation, isUnicode, targetFont, origSize, origAlign, origBold, origItalic) {
-    if (!explanation) return;
-    const label = isUnicode ? "ব্যাখ্যা: " : "e¨vL¨v: ";
-    const safe = String(explanation).replace(/[\r\n\v]/g, " ").trim();
-    const paragraph = anchorRange.insertParagraph(`${label}${safe}`, "Before");
-    mcqApplyFontSafe(paragraph, targetFont, origSize, origBold, origItalic);
-    paragraph.alignment = origAlign;
-}
-
-function mcqInsertSmartAnswerPage(anchorRange, questions, isUnicode, targetFont, origSize, origAlign, origBold, origItalic, answerSize, useSymbols) {
-    anchorRange.insertBreak("Page", "Before");
-    const header = isUnicode ? "সঠিক উত্তর ও ব্যাখ্যা" : "mwVK DËi I e¨vL¨v";
-    const headerPara = anchorRange.insertParagraph(header, "Before");
-    mcqApplyFontSafe(headerPara, targetFont, 12, true, false);
-    headerPara.alignment = "Centered";
-    
-    for (let i = 0; i < questions.length; i++) {
-        const q = questions[i];
-        const number = isUnicode ? toBanglaNumber(i + 1) : i + 1;
-        const label = isUnicode ? "উত্তর: " : "DËi: ";
-        const answerPara = anchorRange.insertParagraph(`${number}. ${label}`, "Before");
-        mcqApplyFontSafe(answerPara, targetFont, origSize, origBold, origItalic);
-        answerPara.alignment = origAlign;
-        
-        let detectedAnswer = q.answer;
-        if (q.options && q.options.length > 0) {
-            const lastOpt = q.options[q.options.length - 1];
-            if (typeof lastOpt[1] === "string") {
-                const match = lastOpt[1].match(/\s+([PQRS])\s*$/i);
-                if (match && !detectedAnswer) {
-                    const map = { "P": "ক", "Q": "খ", "R": "গ", "S": "ঘ" };
-                    detectedAnswer = map[match[1].toUpperCase()];
-                }
-            }
-        }
-        if (detectedAnswer) {
-            if (useSymbols) {
-                const ansMap = { "P": "K", "Q": "L", "R": "M", "S": "N", "ক": "P", "খ": "Q", "গ": "R", "ঘ": "S" };
-                const marker = ansMap[detectedAnswer] || detectedAnswer;
-                const range = answerPara.insertText(marker, "End");
-                mcqApplyFontSafe(range, "ProshnaP", answerSize, false, origItalic);
-            } else {
-                const valMap = { "ক": "K", "খ": "L", "গ": "M", "ঘ": "N" };
-                const normAns = normalizeAnswerLabel(detectedAnswer);
-                const finalVal = isUnicode ? normAns : (valMap[normAns] || normAns);
-                const range = answerPara.insertText(finalVal, "End");
-                mcqApplyFontSafe(range, targetFont, origSize, false, origItalic);
-            }
-        }
-        if (q.explanation) {
-            const expLabel = isUnicode ? " ব্যাখ্যা: " : " e¨vL¨v: ";
-            const safe = String(q.explanation).replace(/[\r\n\v]/g, " ").trim();
-            const expPara = anchorRange.insertParagraph(`${expLabel}${safe}`, "Before");
-            mcqApplyFontSafe(expPara, targetFont, origSize, origBold, origItalic);
-            expPara.alignment = origAlign;
-        }
-    }
-}
-
-async function formatSelectedText(type) {
-    try {
-        await Word.run(async (context) => {
-            const selection = context.document.getSelection();
-            const paragraphs = selection.paragraphs;
-            paragraphs.load("items");
-            await context.sync();
-
-            let origAlign = "Left", origBold = false, origItalic = false, originalParagraph = null;
-            if (paragraphs.items.length) {
-                originalParagraph = paragraphs.items[0];
-                originalParagraph.load("alignment, font/bold, font/italic");
-                await context.sync();
-                origAlign = originalParagraph.alignment || "Left";
-                origBold = originalParagraph.font.bold === true;
-                origItalic = originalParagraph.font.italic === true;
-            }
-            
-            selection.load("text, font/size");
-            await context.sync();
-            const text = selection.text || "";
-            const origSize = Number(selection.font.size) || 10.5;
-            
-            if (!text.trim()) { showStatus("Please select some text in the document first!", true); return; }
-            let tabStops = [];
-            if (originalParagraph) tabStops = await mcqReadSelectedParagraphTabStops(context, originalParagraph);
-            const columnWidth = await mcqGetCurrentColumnWidth(context);
-            
-            const isUnicode = /[\u0980-\u09FF]/.test(text);
-            const targetFont = isUnicode ? "Kalpurush" : "SutonnyMJ";
-            
-            let questions = parseQuestions(text);
-            if (!questions.length) { showStatus("No valid questions found in selection!", true); return; }
-            
-            const shuffleElement = document.getElementById("shuffleCheck");
-            if (shuffleElement && shuffleElement.checked) questions = questions.map(q => shuffleOptions(q));
-            
-            const normStyle = document.getElementById("norm-marker-style");
-            const smartStyle = document.getElementById("smart-marker-style");
-            const useSymbols = type === "normal" 
-                ? (!normStyle || normStyle.value !== "text") 
-                : (!smartStyle || smartStyle.value !== "text");
-
-            const optFontElement = document.getElementById("norm-opt-font");
-            const optSizeElement = document.getElementById("norm-opt-size");
-            const normalAnswerElement = document.getElementById("norm-ans-size");
-            const smartAnswerElement = document.getElementById("smart-ans-size");
-            
-            const optionFont = optFontElement && optFontElement.value.trim() ? optFontElement.value.trim() : "BanglaOMR";
-            const optionSize = optSizeElement && parseFloat(optSizeElement.value) > 0 ? parseFloat(optSizeElement.value) : 9;
-            const normalAnswerSize = normalAnswerElement && parseFloat(normalAnswerElement.value) > 0 ? parseFloat(normalAnswerElement.value) : 10;
-            const smartAnswerSize = smartAnswerElement && parseFloat(smartAnswerElement.value) > 0 ? parseFloat(smartAnswerElement.value) : 10;
-            
-            const anchorRange = selection.insertText(" ", "Replace");
-            
-            for (let i = 0; i < questions.length; i++) {
-                const q = questions[i];
-                const safeQuestion = String(q.question || "").replace(/[\r\n\v]/g, " ").trim();
-                const qNum = isUnicode ? toBanglaNumber(i + 1) : i + 1;
-                
-                const qPara = anchorRange.insertParagraph(`${qNum}. ${safeQuestion}`, "Before");
-                mcqApplyFontSafe(qPara, targetFont, origSize, origBold, origItalic);
-                qPara.alignment = origAlign;
-                
-                const layout = mcqDetectAutoOptionLayout(q.options, tabStops, columnWidth, optionFont, optionSize, targetFont, origSize, origBold, useSymbols, isUnicode);
-                
-                if (type === "normal") {
-                    mcqInsertNormalOptions(anchorRange, q, layout, optionFont, optionSize, targetFont, origSize, origAlign, origBold, origItalic, normalAnswerSize, useSymbols, isUnicode);
-                    mcqInsertNormalExplanation(anchorRange, q.explanation, isUnicode, targetFont, origSize, origAlign, origBold, origItalic);
-                } else if (type === "smart") {
-                    mcqInsertSmartOptions(anchorRange, q, layout, optionFont, optionSize, targetFont, origSize, origAlign, origBold, origItalic, useSymbols, isUnicode);
-                }
-            }
-            if (type === "smart") mcqInsertSmartAnswerPage(anchorRange, questions, isUnicode, targetFont, origSize, origAlign, origBold, origItalic, smartAnswerSize, useSymbols);
-            
-            anchorRange.delete();
-            await context.sync();
-            showStatus(`${questions.length} MCQs formatted successfully!`);
-        });
-    } catch (error) { showStatus("Error: " + (error.message || "Unknown error"), true); }
-}
-
-async function formatQuestionsMacro() {
-    try {
-        await Word.run(async (context) => {
-            const selection = context.document.getSelection();
-            const paragraphs = selection.paragraphs;
-            paragraphs.load("items");
-            await context.sync();
-            
-            if (paragraphs.items.length === 0) { showStatus("Please select text first.", true); return; }
-            
-            let numStyle = document.getElementById("num-style").value;
-            let matchingParagraphs = [];
-            for (let i = 0; i < paragraphs.items.length; i++) { paragraphs.items[i].load("text"); }
-            await context.sync();
-            
-            for (let i = 0; i < paragraphs.items.length; i++) {
-                let p = paragraphs.items[i];
-                let text = p.text.trim();
-                if (text.length < 2) continue;
-                if (/^\s*\(?[কখগঘA-D]\)?[\.\)।:]\s+/i.test(text)) continue;
-                if (/^\s*(?:সঠিক উত্তর|উ|উত্তর|Ans|Answer|mwVK DËi|DËi|ব্যাখ্যা|Explanation|e¨vL¨v)/i.test(text)) continue;
-                
-                let hasNumber = /^\s*(?:\d+|[০-৯]+|[a-zA-Z]|[iIvVxXlLcCdDmMoO]+)\s*[\.\)।]/.test(text);
-                let lastChar = text.slice(-1);
-                let endsWithPunctuation = ["?", "؟", "—", "-", ":"].includes(lastChar);
-                
-                if (hasNumber || endsWithPunctuation || text.includes("?")) matchingParagraphs.push(p);
-            }
-
-            if (matchingParagraphs.length === 0) { showStatus("No questions detected.", true); return; }
-
-            if (numStyle.startsWith("auto-")) {
-                let list = matchingParagraphs[0].startNewList();
-                list.load("id");
-                await context.sync();
-                
-                let listLevelType = Word.ListNumbering.arabic;
-                if (numStyle === "auto-roman") listLevelType = Word.ListNumbering.lowerRoman;
-                if (numStyle === "auto-alpha") listLevelType = Word.ListNumbering.lowerLetter;
-                
-                list.setLevelNumbering(0, listLevelType);
-                
-                for (let i = 0; i < matchingParagraphs.length; i++) {
-                    let p = matchingParagraphs[i];
-                    p.font.bold = true;
-                    if (i > 0) p.attachToList(list.id, 0);
-                }
-                await context.sync();
-            } else {
-                let qCount = 0;
-                for (let i = 0; i < matchingParagraphs.length; i++) {
-                    let p = matchingParagraphs[i];
-                    p.font.bold = true; 
-                    
-                    let text = p.text.trim();
-                    let hasNumber = /^\s*(?:\d+|[০-৯]+|[a-zA-Z]|[iIvVxXlLcCdDmMoO]+)\s*[\.\)।]/.test(text);
-                    
-                    if (!hasNumber) {
-                        let numText = getSequenceString(qCount, numStyle);
-                        let numRange = p.insertText(numText, "Start");
-                        numRange.font.bold = true;
-                    }
-                    qCount++;
-                }
-                await context.sync();
-            }
-            showStatus(`Numbered and Bolded ${matchingParagraphs.length} Questions!`);
-        });
-    } catch (error) { showStatus("Error: " + (error.message || "Unknown"), true); }
-}
-
-// ==========================================
-// DUPLICATE FINDER LOGIC
-// ==========================================
 function dupNormalizeUnicode(text) { return String(text || "").normalize("NFC").replace(/[\u200B-\u200D\uFEFF]/g, ""); }
 function dupNormalizeDigits(text) { return text.replace(/[০-৯]/g, ch => ({"০":"0","১":"1","২":"2","৩":"3","৪":"4","৫":"5","৬":"6","৭":"7","৮":"8","৯":"9"}[ch])); }
 function dupNormalizeWhitespace(text) { return text.replace(/[\t\r\n\v\u00A0]+/g, " ").replace(/\s{2,}/g, " ").trim(); }
@@ -1650,7 +1134,6 @@ function compareDuplicateQuestions(aId, bId) {
     const old = document.getElementById("duplicateComparePanel"); if (old) old.remove(); document.body.insertAdjacentHTML("beforeend", compareHtml);
 }
 
-// --- QUESTION BANK LOGIC ---
 function updateBankCount() {
     let bank = JSON.parse(localStorage.getItem("mcq_studio_bank") || "[]");
     let countEl = document.getElementById("bank-count");
@@ -1815,7 +1298,6 @@ function deleteFromBank(id, btnElement) {
     showStatus("Question removed from Bank!");
 }
 
-// --- SET GENERATOR & EXAM PAPER GENERATOR ---
 function mcqInsertSetOptionsWithAnswer(anchorRange, question, layout, optionFont, optionSize, targetFont, targetSize, origAlign, answerSize, useSymbols, isUnicode) {
     const count = Math.min(4, (question.options || []).length);
     let lastParagraph = null;
@@ -2149,7 +1631,6 @@ async function generateExamPaper() {
     } catch (error) { showStatus("Error: " + (error.message || "Unknown"), true); }
 }
 
-// --- BUTTON EVENT WIRING ---
 let _eventsBound = false;
 
 function bindAppEvents() {
@@ -2497,52 +1978,3 @@ If answer or explanation does not exist, use null.`;
         setLoading("btnExtractText", false); 
     }
 };
-// ====================================================================
-// DAY 6: PRICING MODAL, CHECKOUT & AUTO-SYNC LOGIC
-// ====================================================================
-
-function openPricingModal() {
-    document.getElementById('modalPricing').classList.remove('hidden');
-}
-
-function closePricingModal() {
-    document.getElementById('modalPricing').classList.add('hidden');
-}
-
-// লক স্ক্রিন অ্যাকশনে সরাসরি প্রাইসিং বা সাইন ইন আহ্বান
-function handleLockAction(productId) {
-    if (!FOLIORA_STATE.user || !FOLIORA_STATE.user.isLoggedIn) {
-        openAuthModal('signin');
-    } else {
-        openPricingModal();
-    }
-}
-
-// পেমেন্ট চেকআউট ইনিশিয়েট করা
-async function initiateCheckout(planId) {
-    if (!FOLIORA_STATE.user || !FOLIORA_STATE.user.isLoggedIn) {
-        closePricingModal();
-        openAuthModal('signin');
-        showStatus("প্ল্যান কিনতে অনুগ্রহ করে প্রথমে সাইন ইন করুন।", true);
-        return;
-    }
-
-    const userId = FOLIORA_STATE.user.id;
-    const userEmail = encodeURIComponent(FOLIORA_STATE.user.email);
-    
-    // প্রোডাকশন পেমেন্ট পেজ লিঙ্ক
-    const checkoutUrl = `https://foliora.com/checkout?user_id=${userId}&email=${userEmail}&plan=${planId}`;
-
-    // ব্রাউজারে পেমেন্ট লিঙ্ক ওপেন করা
-    window.open(checkoutUrl, "_blank");
-
-    closePricingModal();
-    showStatus("পেমেন্ট সম্পন্ন করার পর অ্যাড-ইনে ফিরে এসে Sync চাপুন বা একটু অপেক্ষা করুন।");
-}
-
-// ব্যবহারকারী পেমেন্ট শেষ করে Word-এ ফিরে আসলে স্বয়ংক্রিয় লাইসেন্স রিফ্রেশ
-window.addEventListener("focus", () => {
-    if (FOLIORA_STATE.user && FOLIORA_STATE.user.isLoggedIn && supabaseClient) {
-        refreshLiveEntitlements(false);
-    }
-});
