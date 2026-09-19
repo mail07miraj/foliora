@@ -1196,3 +1196,24 @@ If answer or explanation does not exist, use null.`;
         setLoading("btnExtractText", false); 
     }
 };
+
+// --- তাৎক্ষণিক অ্যাপ ইনিশিয়ালাইজেশন (বাটনে ক্লিক ছাড়াই স্ক্রিন লোড হবে) ---
+function startApp() {
+    bindAppEvents();
+    // ডিফল্টভাবে সাথে সাথে MCQ Studio ওপেন করবে
+    switchProduct(FOLIORA_STATE.activeProduct || 'mcq');
+
+    if (typeof Office !== "undefined" && typeof Office.onReady === "function") {
+        Office.onReady(() => {
+            // Word API রেডি হলে ব্যাকগ্রাউন্ডে সেশন সিঙ্ক করবে
+            checkLiveSession();
+        });
+    }
+}
+
+// DOM লোড হওয়ার সাথে সাথেই রান করবে
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", startApp);
+} else {
+    startApp();
+}
