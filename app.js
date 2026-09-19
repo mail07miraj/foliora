@@ -63,7 +63,6 @@ async function refreshLiveEntitlements(notify = false) {
         const userId = FOLIORA_STATE.user.id;
         const currentMonth = new Date().toISOString().slice(0, 7); // 'YYYY-MM'
 
-        // 1. Fetch Entitlements from Supabase
         const { data: entRows, error: entError } = await supabaseClient
             .from('entitlements')
             .select('product_id, tier, is_active')
@@ -86,7 +85,6 @@ async function refreshLiveEntitlements(notify = false) {
             if (!hasOcr) FOLIORA_STATE.entitlements.ocr = 'locked';
         }
 
-        // 2. Fetch Usage Quota from Supabase
         const { data: quotaRows, error: quotaError } = await supabaseClient
             .from('usage_quotas')
             .select('used_units, unit_limit')
@@ -603,234 +601,821 @@ function getStandardAnswerMarker(answer, isUnicode) {
     return `DËi: ${map[norm] || norm}`;
 }
 
-// ============================================================================
-// CONVERTER FIX PATCH — BANGLA COMPLEX JUKTOBORNO / BIJOY LEGACY FORMS
-// Replace ONLY the two converter functions in the current converter section
-// with the versions below.
-// ============================================================================
-
-
+// --- PROVEN ROBUST BIJOY <-> UNICODE CONVERTER ---
 function convertUnicodeToBijoy(text) {
-            if (!text) return "";
-            let str = text;
-            str = str.replace(/\u09AF\u09BC/g, 'য়').replace(/\u09A1\u09BC/g, 'ড়').replace(/\u09A2\u09BC/g, 'ঢ়');
-            str = str.replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/ো/g, 'ো').replace(/ৌ/g, 'ৌ');
-            let cons = "কখগঘঙচছজঝঞটঠডঢণতথদধনপফবভমযরলশষসহড়ঢ়য়ৎংঃঁ"; 
-            str = str.replace(new RegExp("র\u09CD([" + cons + "](?:\u09CD[" + cons + "])*)", "g"), "$1©");
-            str = str.replace(new RegExp("([" + cons + "](?:\u09CD[" + cons + "])*(?:©)?)(ি|ে|ৈ)", "g"), "$2$1");
-            str = str.replace(/(^|[\s\(\[\{'"‘“\-])ে/g, "$1†").replace(/ে/g, "‡");
-            const u2bJukta = {
-                'ন্ট':'›U', 'প্ট':'Þ', 'ষ্ক':'®‹', 'ল্ক':'é', 'ল্গ':'ê', 'ল্ড':'ì', 'শ্চ':'ð', 'স্কৃ':'¯‹…',
-                'গ্ব':'M¦', 'ভু':'fz', 'খ্ব':'L¡', 'ক্ক':'°', 'ক্ট':'±', 'ক্ত':'³', 'ক্ব':'K¡', 'ক্স':'·', 'ক্ষ':'¶', 'ক্ষ্ম':'¶g', 'ক্ষ্য':'¶¨', 'ক্ষু':'¶z',
-                'জ্ঞ':'Á', 'ঙ্ক':'¼', 'ঙ্খ':'¼L', 'ঙ্গ':'½', 'ঙ্ঘ':'½N', 'ট্ট':'Æ', 'ঠ্ঠ':'V&V', 'ড্ড':'Ç', 'ণ্ট':'È', 'ণ্ঠ':'É', 'ণ্ড':'Û', 'ন্ড':'Û',
-                'ত্ত':'Ë', 'ত্থ':'Ì', 'ত্র':'Î', 'দ্দ':'Ï', 'দ্ধ':'×', 'দ্ব':'Ø', 'দ্ম':'Ù', 'ন্দ':'›`', 'ন্ধ':'Ü', 'ন্ন':'bœ', 'ন্ব':'b¦', 'ন্ম':'b¥', 'ন্দ্র':'›`«', 'দ্র':'`ª',
-                'ম্প':'¤ú', 'ম্ব':'¤^', 'ম্ম':'¤§', 'ম্ভ':'¤¢', 'ন্স':'Ý', 'ত্ম':'Z¥', 'ত্ন':'Zœ', 'ত্ম্য':'Z¥¨', 'স্ট':'÷', 'ষ্ট':'ó', 'ষ্ঠ':'ô', 'ষ্ণ':'ò', 'ষ্প':'®ú', 'ষ্ফ':'®ù', 'ষ্ম':'®§',
-                'স্ক':'¯‹', 'স্খ':'¯Œ', 'স্থ':'¯’', 'স্ন':'mœ', 'স্প':'¯ú', 'স্ফ':'ù', 'স্ম':'¯§', 'স্ব':'¯^', 'স্ত':'¯Í', 'স্স':'m&m',
-                'হ্ম':'þ', 'হু':'û', 'হৃ':'ü', 'হ্ন':'ý', 'হ্ব':'nŸ', 'প্ত':'ß', 'ব্দ':'ã', 'ব্ধ':'ä', 'ব্ব':'e&e', 'ব্জ':'e&R',
-                'শ্র':'kÖ', 'ক্র':'µ', 'গ্র':'MÖ', 'প্র':'cÖ', 'ড্র':'W«', 'ট্র':'U«', 'ফ্র':'d«', 'ব্র':'eª',
-                'ব্ল':'eø', 'ক্ল':'K¬', 'গ্ল':'Mø', 'প্ল':'cø', 'ফ্ল':'d¬', 'ম্ল':'gø', 'শ্ল':'kø', 'স্ল':'mø', 'হ্ল':'n&j',
-                'ঞ্চ':'Â', 'ঞ্ছ':'Ã', 'ঞ্জ':'Ä', 'রু':'iæ', 'রূ':'i~', 'শু':'ï', 'গু':'¸', 'ন্তু':'š‘', 'স্তু':'¯‘',
-                'চ্চ':'”P', 'চ্ছ':'”Q', 'জ্জ':'¾', 'ঝ্ঝ':'S&S', 'দ্ঘ':'`&N', 'ন্ত':'šÍ', 'ন্থ':'š’', 'ল্প':'í', 'ল্ব':'j&e', 'ল্ম':'j&g', 'ল্ল':'jø', 'ল্ফ':'j&d',
-                'ধ্ব':'aŸ', 'শ্ব':'k¦', 'ত্ব':'Z¡', 'থ্ব':'_¡', 'ম্ন':'gœ', 'শ্ম':'k&g', 'দ্য':'`¨', 'ন্ত্র':'š¿', 'ম্প্র':'¤cÖ', 'স্থ্য':'¯’¨', 'ষ্ট্র':'ó«', 
-                'শ্ন':'kœ', 'ব্য':'e¨', 'স্ত্র':'¯¿', 'ত্ত্ব':'Ë¡', 'ন্দ্ব':'›Ø', 'প্ন':'cœ', 'ত্য':'Z¨', 'স্ক্র':'¯‹«', 'স্ট্র':'÷«', 'থ্র':'_«', 'প্প':'c&c', 'প্স':'c&m',
-                'ঙ্ক্ষ':'¼¶', 'ঙ্ম':'O&g', 'গ্ধ':'\xBB', '্য':'¨', '্র':'«', '্':'&',
-                'কু':'Kz', 'কূ':'K‚', 'চু':'Pz', 'চূ':'P‚', 'ঝু':'Sz', 'ঝূ':'S‚', 'তু':'Zz', 'তূ':'Z‚', 'ভূ':'f‚', 'কৃ':'K…', 'তৃ':'Z…',
-                'ত্যু':'Zz¨', 'প্যু':'cz¨', 'ফ্যু':'dz¨', 'ভ্যু':'fz¨', 'হ্যু':'n~¨', 'ক্যু':'Ky¨', 'গ্যু':'My¨', 'চ্যু':'Py¨', 'জ্যু':'Ry¨', 'ড্যু':'Wy¨', 'দ্যু':'`y¨', 'ধ্যু':'ay¨', 'ব্যু':'ey¨', 'ল্যু':'jy¨', 'শ্যু':'k~¨', 'ত্যূ':'Z‚¨'
-            };
-            let keys = Object.keys(u2bJukta).sort((a, b) => b.length - a.length);
-            for (let k of keys) { str = str.split(k).join(u2bJukta[k]); }
+    if (!text) return "";
+    let str = text;
+    str = str.replace(/\u09AF\u09BC/g, 'য়').replace(/\u09A1\u09BC/g, 'ড়').replace(/\u09A2\u09BC/g, 'ঢ়');
+    str = str.replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/ো/g, 'ো').replace(/ৌ/g, 'ৌ');
+    
+    let cons = "কখগঘঙচছজঝঞটঠডঢণতথদধনপফবভমযরলশষসহড়ঢ়য়ৎংঃঁ"; 
+    str = str.replace(new RegExp("র\u09CD([" + cons + "](?:\u09CD[" + cons + "])*)", "g"), "$1©");
+    str = str.replace(new RegExp("([" + cons + "](?:\u09CD[" + cons + "])*(?:©)?)(ি|ে|ৈ)", "g"), "$2$1");
+    str = str.replace(/(^|[\s\(\[\{'"‘“\-])ে/g, "$1†").replace(/ে/g, "‡");
 
-            const map = {
-                'অ':'A', 'আ':'Av', 'ই':'B', 'ঈ':'C', 'উ':'D', 'ঊ':'E', 'ঋ':'F', 'এ':'G', 'ঐ':'H', 'ও':'I', 'ঔ':'J', 'ক':'K', 'খ':'L', 'গ':'M', 'ঘ':'N', 'ঙ':'O', 'চ':'P', 'ছ':'Q', 'জ':'R', 'ঝ':'S', 'ঞ':'T', 'ট':'U', 'ঠ':'V', 'ড':'W', 'ঢ':'X', 'ণ':'Y', 'ত':'Z', 'থ':'_', 'দ':'`', 'ধ':'a', 'ন':'b', 'প':'c', 'ফ':'d', 'ব':'e', 'ভ':'f', 'ম':'g', 'য':'h', 'র':'i', 'ল':'j', 'শ':'k', 'ষ':'l', 'স':'m', 'হ':'n', 'ড়':'o', 'ঢ়':'p', 'য়':'q', 'ৎ':'r', 'ং':'s', 'ঃ':'t', 'ঁ':'u', 'া':'v', 'ি':'w', 'ী':'x', 'ু':'y', 'ূ':'~', 'ৃ':'„', 'ে':'‡', 'ৈ':'ˆ', 'ৗ':'Š', '।':'|', '০':'0', '১':'1', '২':'2', '৩':'3', '৪':'4', '৫':'5', '৬':'6', '৭':'৭', '৮':'8', '৯':'9', '©':'©' 
-            };
-            let out = "";
-            for (let i = 0; i < str.length; i++) { out += map[str[i]] || str[i]; }
-            return out;
-        }
+    const u2bJukta = {
+        'ন্ট':'›U', 'প্ট':'Þ', 'ষ্ক':'®‹', 'ল্ক':'é', 'ল্গ':'ê', 'ল্ড':'ì', 'শ্চ':'ð', 'স্কৃ':'¯‹…',
+        'গ্ব':'M¦', 'ভু':'fz', 'খ্ব':'L¡', 'ক্ক':'°', 'ক্ট':'±', 'ক্ত':'³', 'ক্ব':'K¡', 'ক্স':'·', 'ক্ষ':'¶', 'ক্ষ্ম':'¶g', 'ক্ষ্য':'¶¨', 'ক্ষু':'¶z',
+        'জ্ঞ':'Á', 'ঙ্ক':'¼', 'ঙ্খ':'¼L', 'ঙ্গ':'½', 'ঙ্ঘ':'½N', 'ট্ট':'Æ', 'ঠ্ঠ':'V&V', 'ড্ড':'Ç', 'ণ্ট':'È', 'ণ্ঠ':'É', 'ণ্ড':'Û', 'ন্ড':'Û',
+        'ত্ত':'Ë', 'ত্থ':'Ì', 'ত্র':'Î', 'দ্দ':'Ï', 'দ্ধ':'×', 'দ্ব':'Ø', 'দ্ম':'Ù', 'ন্দ':'›`', 'ন্ধ':'Ü', 'ন্ন':'bœ', 'ন্ব':'b¦', 'ন্ম':'b¥', 'ন্দ্র':'›`«', 'দ্র':'`ª',
+        'ম্প':'¤ú', 'ম্ব':'¤^', 'ম্ম':'¤§', 'ম্ভ':'¤¢', 'ন্স':'Ý', 'ত্ম':'Z¥', 'ত্ন':'Zœ', 'ত্ম্য':'Z¥¨', 'স্ট':'÷', 'ষ্ট':'ó', 'ষ্ঠ':'ô', 'ষ্ণ':'ò', 'ষ্প':'®ú', 'ষ্ফ':'®ù', 'ষ্ম':'®§',
+        'স্ক':'¯‹', 'স্খ':'¯Œ', 'স্থ':'¯’', 'স্ন':'mœ', 'স্প':'¯ú', 'স্ফ':'ù', 'স্ম':'¯§', 'স্ব':'¯^', 'স্ত':'¯Í', 'স্স':'m&m',
+        'হ্ম':'þ', 'হু':'û', 'হৃ':'ü', 'হ্ন':'ý', 'হ্ব':'nŸ', 'প্ত':'ß', 'ব্দ':'ã', 'ব্ধ':'ä', 'ব্ব':'e&e', 'ব্জ':'e&R',
+        'শ্র':'kÖ', 'ক্র':'µ', 'গ্র':'MÖ', 'প্র':'cÖ', 'ড্র':'W«', 'ট্র':'U«', 'ফ্র':'d«', 'ব্র':'eª',
+        'ব্ল':'eø', 'ক্ল':'K¬', 'গ্ল':'Mø', 'প্ল':'cø', 'ফ্ল':'d¬', 'ম্ল':'gø', 'শ্ল':'kø', 'স্ল':'mø', 'হ্ল':'n&j',
+        'ঞ্চ':'Â', 'ঞ্ছ':'Ã', 'ঞ্জ':'Ä', 'রু':'iæ', 'রূ':'i~', 'শু':'ï', 'গু':'¸', 'ন্তু':'š‘', 'স্তু':'¯‘',
+        'চ্চ':'”P', 'চ্ছ':'”Q', 'জ্জ':'¾', 'ঝ্ঝ':'S&S', 'দ্ঘ':'`&N', 'ন্ত':'šÍ', 'ন্থ':'š’', 'ল্প':'í', 'ল্ব':'j&e', 'ল্ম':'j&g', 'ল্ল':'jø', 'ল্ফ':'j&d',
+        'ধ্ব':'aŸ', 'শ্ব':'k¦', 'ত্ব':'Z¡', 'থ্ব':'_¡', 'ম্ন':'gœ', 'শ্ম':'k&g', 'দ্য':'`¨', 'ন্ত্র':'š¿', 'ম্প্র':'¤cÖ', 'স্থ্য':'¯’¨', 'ষ্ট্র':'ó«', 
+        'শ্ন':'kœ', 'ব্য':'e¨', 'স্ত্র':'¯¿', 'ত্ত্ব':'Ë¡', 'ন্দ্ব':'›Ø', 'প্ন':'cœ', 'ত্য':'Z¨', 'স্ক্র':'¯‹«', 'স্ট্র':'÷«', 'থ্র':'_«', 'প্প':'c&c', 'প্স':'c&m',
+        'ঙ্ক্ষ':'¼¶', 'ঙ্ম':'O&g', 'গ্ধ':'\xBB', '্য':'¨', '্র':'«', '্':'&',
+        'কু':'Kz', 'কূ':'K‚', 'চু':'Pz', 'চূ':'P‚', 'ঝু':'Sz', 'ঝূ':'S‚', 'তু':'Zz', 'তূ':'Z‚', 'ভূ':'f‚', 'কৃ':'K…', 'তৃ':'Z…',
+        'ত্যু':'Zz¨', 'প্যু':'cz¨', 'ফ্যু':'dz¨', 'ভ্যু':'fz¨', 'হ্যু':'n~¨', 'ক্যু':'Ky¨', 'গ্যু':'My¨', 'চ্যু':'Py¨', 'জ্যু':'Ry¨', 'ড্যু':'Wy¨', 'দ্যু':'`y¨', 'ধ্যু':'ay¨', 'ব্যু':'ey¨', 'ল্যু':'jy¨', 'শ্যু':'k~¨', 'ত্যূ':'Z‚¨'
+    };
+    let keys = Object.keys(u2bJukta).sort((a, b) => b.length - a.length);
+    for (let k of keys) { str = str.split(k).join(u2bJukta[k]); }
+
+    const map = {
+        'অ':'A', 'আ':'Av', 'ই':'B', 'ঈ':'C', 'উ':'D', 'ঊ':'E', 'ঋ':'F', 'এ':'G', 'ঐ':'H', 'ও':'I', 'ঔ':'J', 
+        'ক':'K', 'খ':'L', 'গ':'M', 'ঘ':'N', 'ঙ':'O', 'চ':'P', 'ছ':'Q', 'জ':'R', 'ঝ':'S', 'ঞ':'T', 
+        'ট':'U', 'ঠ':'V', 'ড':'W', 'ঢ':'X', 'ণ':'Y', 'ত':'Z', 'থ':'_', 'দ':'`', 'ধ':'a', 'ন':'b', 
+        'প':'c', 'ফ':'d', 'ব':'e', 'ভ':'f', 'ম':'g', 'য':'h', 'র':'i', 'ল':'j', 'শ':'k', 'ষ':'l', 
+        'স':'m', 'হ':'n', 'ড়':'o', 'ঢ়':'p', 'য়':'q', 'ৎ':'r', 'ং':'s', 'ঃ':'t', 'ঁ':'u', 'া':'v', 
+        'ি':'w', 'ী':'x', 'ু':'y', 'ূ':'~', 'ৃ':'„', 'ে':'‡', 'ৈ':'ˆ', 'ৗ':'Š', '।':'|', 
+        '০':'0', '১':'1', '২':'2', '৩':'3', '৪':'4', '৫':'5', '৬':'6', '৭':'৭', '৮':'8', '৯':'9', '©':'©' 
+    };
+    let out = "";
+    for (let i = 0; i < str.length; i++) { out += map[str[i]] || str[i]; }
+    return out;
+}
 
 function convertBijoyToUnicode(text) {
-            if (!text) return "";
+    if (!text) return "";
+    let str = text.replace(/[\u200B-\u200D\uFEFF\+]/g, "");
 
-            let str = text.replace(/[\u200B-\u200D\uFEFF\+]/g, "");
+    const b2uJukta = {
+        '›U':'ন্ট', 'Þ':'প্ট', '®‹':'ষ্ক', 'é':'ল্ক', 'ê':'ল্গ', 'ì':'ল্ড', 'ð':'শ্চ', '¯‹…':'স্কৃ',
+        'M¦':'গ্ব', 'fz':'ভু', 'L¡':'খ্ব', '°':'ক্ক', '±':'ক্ট', '³':'ক্ত', 'K¡':'ক্ব',
+        '·':'ক্স', '¶':'ক্ষ', '²':'ক্ষ্ম', '¶¨':'ক্ষ্য', '¶z':'ক্ষু',
+        'Á':'জ্ঞ', '¼':'ঙ্ক', '¼L':'ঙ্খ', '½':'ঙ্গ', '½N':'ঙ্ঘ', 'Æ':'ট্ট', 'Ç':'ড্ড',
+        'È':'ণ্ট', 'É':'ণ্ঠ', 'Û':'ণ্ড', '\xDB':'ণ্ড',
+        'Ë':'ত্ত', 'Ì':'ত্থ', 'Î':'ত্র', 'Ï':'দ্দ', '×':'দ্ধ', 'Ø':'দ্ব', 'Ù':'দ্ম',
+        '›`':'ন্দ', 'Ü':'ন্ধ', 'bœ':'ন্ন', 'b¦':'ন্ব', 'b¥':'ন্ম', '›`«':'ন্দ্র', '`ª':'দ্র',
+        '¤ú':'ম্প', '¤^':'ম্ব', '¤§':'ম্ম', '¤¢':'ম্ভ', 'Ý':'ন্স', 'Z¥':'ত্ম', 'Zœ':'ত্ন',
+        'Z¥¨':'ত্ম্য', '÷':'স্ট', 'ó':'ষ্ট', 'ô':'ষ্ঠ', 'ò':'ষ্ণ', '®ú':'ষ্প', '®ù':'ষ্ফ',
+        '®§':'ষ্ম', '¯‹':'স্ক', '¯Œ':'স্খ', '¯’':'স্থ', 'mœ':'স্ন', '¯ú':'স্প', 'ù':'স্ফ',
+        '¯§':'স্ম', '¯^':'স্ব', '¯Í':'স্ত', 'm&m':'স্স',
+        'þ':'হ্ম', 'û':'হু', 'ü':'হৃ', 'ý':'হ্ন', 'nŸ':'হ্ব', 'ß':'প্ত', 'ã':'ব্দ',
+        'ä':'ব্ধ', 'e&e':'ব্ব', 'e&R':'ব্জ',
+        'kÖ':'শ্র', 'µ':'ক্র', 'MÖ':'গ্র', 'cÖ':'প্র', 'W«':'ড্র', 'U«':'ট্র',
+        'd«':'ফ্র', 'eª':'ব্র',
+        'eø':'ব্ল', 'K¬':'ক্ল', 'Mø':'গ্ল', 'cø':'প্ল', 'd¬':'ফ্ল', 'gø':'ম্ল',
+        'kø':'শ্ল', 'mø':'স্ল', 'n&j':'হ্ল',
+        '\xC2':'ঞ্চ', 'Â':'ঞ্চ', '\xC3':'ঞ্ছ', 'Ã':'ঞ্ছ', '\xC4':'ঞ্জ', 'Ä':'ঞ্জ',
+        'iæ':'রু', 'i~':'রূ', 'ï':'শু', '¸':'গু', 'š‘':'ন্তু', '¯‘':'স্তু',
+        '”P':'চ্চ', '\x94P':'চ্চ', '”Q':'চ্ছ', '\x94Q':'চ্ছ', '”':'চ্', '\x94':'চ্',
+        '•':'চ্ছ', '¾':'জ্জ', 'S&S':'ঝ্ঝ', '`&N':'দ্ঘ', 'šÍ':'ন্ত', 'š’':'ন্থ',
+        'í':'ল্প', 'j&e':'ল্ব', 'j&g':'ল্ম', 'jø':'ল্ল', 'j&d':'ল্ফ',
+        'aŸ':'ধ্ব', 'k¦':'শ্ব', 'Z¡':'ত্ব', '_¡':'থ্ব', 'gœ':'ম্ন', 'k&g':'শ্ম',
+        '`¨':'দ্য', 'š¿':'ন্ত্র', '¤cÖ':'ম্প্র',
+        '¯’¨':'স্থ্য', 'ó«':'ষ্ট্র',
+        'kœ':'শ্ন', 'e¨':'ব্য', '¯¿':'স্ত্র', 'Ë¡':'ত্ত্ব', '›Ø':'দ্বন্দ্ব',
+        'cœ':'প্ন', 'Z¨':'ত্য', '¯‹«':'স্ক্র', '÷«':'স্ট্র', '_«':'থ্র',
+        'c&c':'প্প', 'c&m':'প্স', '¼¶':'ঙ্ক্ষ', 'O&g':'ঙ্ম', '\xBB':'গ্ধ', '»':'গ্ধ',
+        '¨':'্য', '«':'্র', '&':'্',
+        'Kz':'কু', 'K‚':'কূ', 'Pz':'চু', 'P‚':'চূ', 'Sz':'ঝু', 'S‚':'ঝূ',
+        'Zz':'তু', 'Z‚':'তূ', 'f‚':'ভূ', 'K…':'কৃ', 'Z…':'তৃ',
+        'Zz¨':'ত্যু', 'cz¨':'প্যু', 'dz¨':'ফ্যু', 'fz¨':'ভ্যু', 'n~¨':'হ্যু',
+        'Ky¨':'ক্যু', 'My¨':'গ্যু', 'Py¨':'চ্যু', 'Ry¨':'জ্যু', 'Wy¨':'ড্যু',
+        '`y¨':'দ্যু', 'ay¨':'ধ্যু', 'ey¨':'ব্যু', 'jy¨':'ল্যু', 'k~¨':'শ্যু',
+        'Z‚¨':'ত্যূ'
+    };
 
-            const b2uJukta = {
-                '›U':'ন্ট', 'Þ':'প্ট', '®‹':'ষ্ক', 'é':'ল্ক', 'ê':'ল্গ', 'ì':'ল্ড', 'ð':'শ্চ', '¯‹…':'স্কৃ',
-                'M¦':'গ্ব', 'fz':'ভু', 'L¡':'খ্ব', '°':'ক্ক', '±':'ক্ট', '³':'ক্ত', 'K¡':'ক্ব',
-                '·':'ক্স', '¶':'ক্ষ', '²':'ক্ষ্ম', '¶¨':'ক্ষ্য', '¶z':'ক্ষু',
-                'Á':'জ্ঞ', '¼':'ঙ্ক', '¼L':'ঙ্খ', '½':'ঙ্গ', '½N':'ঙ্ঘ', 'Æ':'ট্ট', 'Ç':'ড্ড',
-                'È':'ণ্ট', 'É':'ণ্ঠ', 'Û':'ণ্ড', '\xDB':'ণ্ড',
-                'Ë':'ত্ত', 'Ì':'ত্থ', 'Î':'ত্র', 'Ï':'দ্দ', '×':'দ্ধ', 'Ø':'দ্ব', 'Ù':'দ্ম',
-                '›`':'ন্দ', 'Ü':'ন্ধ', 'bœ':'ন্ন', 'b¦':'ন্ব', 'b¥':'ন্ম', '›`«':'ন্দ্র', '`ª':'দ্র',
-                '¤ú':'ম্প', '¤^':'ম্ব', '¤§':'ম্ম', '¤¢':'ম্ভ', 'Ý':'ন্স', 'Z¥':'ত্ম', 'Zœ':'ত্ন',
-                'Z¥¨':'ত্ম্য', '÷':'স্ট', 'ó':'ষ্ট', 'ô':'ষ্ঠ', 'ò':'ষ্ণ', '®ú':'ষ্প', '®ù':'ষ্ফ',
-                '®§':'ষ্ম', '¯‹':'স্ক', '¯Œ':'স্খ', '¯’':'স্থ', 'mœ':'স্ন', '¯ú':'স্প', 'ù':'স্ফ',
-                '¯§':'স্ম', '¯^':'স্ব', '¯Í':'স্ত', 'm&m':'স্স',
-                'þ':'হ্ম', 'û':'হু', 'ü':'হৃ', 'ý':'হ্ন', 'nŸ':'হ্ব', 'ß':'প্ত', 'ã':'ব্দ',
-                'ä':'ব্ধ', 'e&e':'ব্ব', 'e&R':'ব্জ',
-                'kÖ':'শ্র', 'µ':'ক্র', 'MÖ':'গ্র', 'cÖ':'প্র', 'W«':'ড্র', 'U«':'ট্র',
-                'd«':'ফ্র', 'eª':'ব্র',
-                'eø':'ব্ল', 'K¬':'ক্ল', 'Mø':'গ্ল', 'cø':'প্ল', 'd¬':'ফ্ল', 'gø':'ম্ল',
-                'kø':'শ্ল', 'mø':'স্ল', 'n&j':'হ্ল',
-                '\xC2':'ঞ্চ', 'Â':'ঞ্চ', '\xC3':'ঞ্ছ', 'Ã':'ঞ্ছ', '\xC4':'ঞ্জ', 'Ä':'ঞ্জ',
-                'iæ':'রু', 'i~':'রূ', 'ï':'শু', '¸':'গু', 'š‘':'ন্তু', '¯‘':'স্তু',
-                '”P':'চ্চ', '\x94P':'চ্চ', '”Q':'চ্ছ', '\x94Q':'চ্ছ', '”':'চ্', '\x94':'চ্',
-                '•':'চ্ছ', '¾':'জ্জ', 'S&S':'ঝ্ঝ', '`&N':'দ্ঘ', 'šÍ':'ন্ত', 'š’':'ন্থ',
-                'í':'ল্প', 'j&e':'ল্ব', 'j&g':'ল্ম', 'jø':'ল্ল', 'j&d':'ল্ফ',
-                'aŸ':'ধ্ব', 'k¦':'শ্ব', 'Z¡':'ত্ব', '_¡':'থ্ব', 'gœ':'ম্ন', 'k&g':'শ্ম',
-                '`¨':'দ্য', 'š¿':'ন্ত্র', '¤cÖ':'ম্প্র',
-                '¯’¨':'স্থ্য', 'ó«':'ষ্ট্র',
-                'kœ':'শ্ন', 'e¨':'ব্য', '¯¿':'স্ত্র', 'Ë¡':'ত্ত্ব', '›Ø':'ন্দ্ব',
-                'cœ':'প্ন', 'Z¨':'ত্য', '¯‹«':'স্ক্র', '÷«':'স্ট্র', '_«':'থ্র',
-                'c&c':'প্প', 'c&m':'প্স', '¼¶':'ঙ্ক্ষ', 'O&g':'ঙ্ম', '\xBB':'গ্ধ', '»':'গ্ধ',
-                '¨':'্য', '«':'্র', '&':'্',
-                'Kz':'কু', 'K‚':'কূ', 'Pz':'চু', 'P‚':'চূ', 'Sz':'ঝু', 'S‚':'ঝূ',
-                'Zz':'তু', 'Z‚':'তূ', 'f‚':'ভূ', 'K…':'কৃ', 'Z…':'তৃ',
-                'Zz¨':'ত্যু', 'cz¨':'প্যু', 'dz¨':'ফ্যু', 'fz¨':'ভ্যু', 'n~¨':'হ্যু',
-                'Ky¨':'ক্যু', 'My¨':'গ্যু', 'Py¨':'চ্যু', 'Ry¨':'জ্যু', 'Wy¨':'ড্যু',
-                '`y¨':'দ্যু', 'ay¨':'ধ্যু', 'ey¨':'ব্যু', 'jy¨':'ল্যু', 'k~¨':'শ্যু',
-                'Z‚¨':'ত্যূ'
-            };
+    const keys = Object.keys(b2uJukta).sort((a, b) => b.length - a.length);
+    for (const key of keys) { str = str.split(key).join(b2uJukta[key]); }
 
-            const keys = Object.keys(b2uJukta).sort((a, b) => b.length - a.length);
-            for (const key of keys) {
-                str = str.split(key).join(b2uJukta[key]);
-            }
+    const b2u = {
+        'A':'অ', 'B':'ই', 'C':'ঈ', 'D':'উ', 'E':'ঊ', 'F':'ঋ', 'G':'এ', 'H':'ঐ',
+        'I':'ও', 'J':'ঔ', 'K':'ক', 'L':'খ', 'M':'গ', 'N':'ঘ', 'O':'ঙ', 'P':'চ',
+        'Q':'ছ', 'R':'জ', 'S':'ঝ', 'T':'ঞ', 'U':'ট', 'V':'ঠ', 'W':'ড', 'X':'ঢ',
+        'Y':'ণ', 'Z':'ত', '_':'থ', '`':'দ', 'a':'ধ', 'b':'ন', 'c':'প', 'd':'ফ',
+        'e':'ব', 'f':'ভ', 'g':'ম', 'h':'য', 'i':'র', 'j':'ল', 'k':'শ', 'l':'ষ',
+        'm':'স', 'n':'হ', 'o':'ড়', 'p':'ঢ়', 'q':'য়', 'r':'ৎ', 's':'ং', 't':'ঃ',
+        'u':'ঁ', 'v':'া', 'w':'ি', 'x':'ী', 'y':'ু', '~':'ূ', 'z':'ু', '‚':'ূ',
+        '\x82':'ূ', '\x85':'ৃ', '…':'ৃ', '„':'ৃ', '\x84':'ৃ',
+        '\x86':'ে', '†':'ে', '\x87':'ে', '‡':'ে',
+        '\x88':'ৈ', 'ˆ':'ৈ', '\x8A':'ৗ', 'Š':'ৗ',
+        '|':'।',
+        '0':'০', '1':'১', '2':'২', '3':'৩', '4':'৪',
+        '5':'৫', '6':'৬', '7':'৭', '8':'৮', '9':'৯',
+        '©':'©'
+    };
 
-            const b2u = {
-                'A':'অ', 'B':'ই', 'C':'ঈ', 'D':'উ', 'E':'ঊ', 'F':'ঋ', 'G':'এ', 'H':'ঐ',
-                'I':'ও', 'J':'ঔ', 'K':'ক', 'L':'খ', 'M':'গ', 'N':'ঘ', 'O':'ঙ', 'P':'চ',
-                'Q':'ছ', 'R':'জ', 'S':'ঝ', 'T':'ঞ', 'U':'ট', 'V':'ঠ', 'W':'ড', 'X':'ঢ',
-                'Y':'ণ', 'Z':'ত', '_':'থ', '`':'দ', 'a':'ধ', 'b':'ন', 'c':'প', 'd':'ফ',
-                'e':'ব', 'f':'ভ', 'g':'ম', 'h':'য', 'i':'র', 'j':'ল', 'k':'শ', 'l':'ষ',
-                'm':'স', 'n':'হ', 'o':'ড়', 'p':'ঢ়', 'q':'য়', 'r':'ৎ', 's':'ং', 't':'ঃ',
-                'u':'ঁ', 'v':'া', 'w':'ি', 'x':'ী', 'y':'ু', '~':'ূ', 'z':'ু', '‚':'ূ',
-                '\x82':'ূ', '\x85':'ৃ', '…':'ৃ', '„':'ৃ', '\x84':'ৃ',
-                '\x86':'ে', '†':'ে', '\x87':'ে', '‡':'ে',
-                '\x88':'ৈ', 'ˆ':'ৈ', '\x8A':'ৗ', 'Š':'ৗ',
-                '|':'।',
-                '0':'০', '1':'১', '2':'২', '3':'৩', '4':'৪',
-                '5':'৫', '6':'৬', '7':'৭', '8':'৮', '9':'৯',
-                '©':'©'
-            };
+    str = str.replace(/Av/g, 'আ');
+    let out = "";
+    for (let i = 0; i < str.length; i++) { out += b2u[str[i]] || str[i]; }
+    str = out;
 
-            str = str.replace(/Av/g, 'আ');
+    const cons = "কখগঘঙচছজঝঞটঠডঢণতথদধনপফবভমযরলশষসহড়ঢ়য়ৎংঃঁ";
+    const regexOrder = new RegExp(
+        "([িেৈ])?([" + cons + "](?:\u09CD[" + cons + "])*)(©)?([াীুূৃৗ])?",
+        "g"
+    );
 
-            let out = "";
-            for (let i = 0; i < str.length; i++) {
-                out += b2u[str[i]] || str[i];
-            }
+    str = str.replace(regexOrder, function(match, preKar, cluster, ref, postKar) {
+        return (ref ? "র্" : "") + cluster + (preKar || "") + (postKar || "");
+    });
 
-            str = out;
+    str = str
+        .replace(/অা/g, 'আ')
+        .replace(/েৃ/g, 'ৃ')
+        .replace(/ৌ/g, 'ৌ')
+        .replace(/ো/g, 'ো')
+        .replace(/([ুূৃ])্য/g, '্য$1');
 
-            const cons = "কখগঘঙচছজঝঞটঠডঢণতথদধনপফবভমযরলশষসহড়ঢ়য়ৎংঃঁ";
-            const regexOrder = new RegExp(
-                "([িেৈ])?([" + cons + "](?:\u09CD[" + cons + "])*)(©)?([াীুূৃৗ])?",
-                "g"
-            );
+    return str.normalize("NFC");
+}
 
-            str = str.replace(regexOrder, function(match, preKar, cluster, ref, postKar) {
-                return (ref ? "র্" : "") + cluster + (preKar || "") + (postKar || "");
-            });
-
-            str = str
-                .replace(/অা/g, 'আ')
-                .replace(/েৃ/g, 'ৃ')
-                .replace(/ৌ/g, 'ৌ')
-                .replace(/ো/g, 'ো')
-                .replace(/([ুূৃ])্য/g, '্য$1');
-
-            return str.normalize("NFC");
-        }
-
-// ============================================================================
-// CONVERTER ACTION HANDLER
-// ============================================================================
+// --- CONVERTER HANDLER ---
 async function runSmartConverter(direction) {
-            try {
-                await Word.run(async (context) => {
-                    const selection = context.document.getSelection();
-                    selection.load("text, font/bold, font/italic, font/size");
-                    const paras = selection.paragraphs;
-                    paras.load("items");
-                    await context.sync();
+    try {
+        await Word.run(async (context) => {
+            const selection = context.document.getSelection();
+            selection.load("text, font/bold, font/italic, font/size");
+            const paras = selection.paragraphs;
+            paras.load("items");
+            await context.sync();
 
-                    const rawText = selection.text;
-                    if (!rawText || !rawText.trim()) { showStatus("Select text to convert!", true); return; }
+            const rawText = selection.text;
+            if (!rawText || !rawText.trim()) { showStatus("Select text to convert!", true); return; }
 
-                    let origAlign = "Left";
-                    if (paras.items.length > 0) {
-                        paras.items[0].load("alignment");
-                        await context.sync();
-                        origAlign = paras.items[0].alignment || "Left";
-                    }
+            let origAlign = "Left";
+            if (paras.items.length > 0) {
+                paras.items[0].load("alignment");
+                await context.sync();
+                origAlign = paras.items[0].alignment || "Left";
+            }
 
-                    let origBold = selection.font.bold === true;
-                    let origItalic = selection.font.italic === true;
-                    let origSize = selection.font.size || 10.5;
+            let origBold = selection.font.bold === true;
+            let origItalic = selection.font.italic === true;
+            let origSize = selection.font.size || 10.5;
 
-                    let targetDirection = direction;
-                    let prefix = targetDirection === "UniToBijoy" ? "u2b" : "b2u";
-                    let customFontName = document.getElementById(`${prefix}-font`).value.trim();
-                    let customFontSize = document.getElementById(`${prefix}-size`).value.trim();
+            let targetDirection = direction;
+            let prefix = targetDirection === "UniToBijoy" ? "u2b" : "b2u";
+            let customFontName = document.getElementById(`${prefix}-font`).value.trim();
+            let customFontSize = document.getElementById(`${prefix}-size`).value.trim();
 
-                    let defaultFont = targetDirection === "UniToBijoy" ? "SutonnyMJ" : "Kalpurush";
-                    let finalFontName = customFontName !== "" ? customFontName : defaultFont;
-                    let finalFontSize = customFontSize !== "" ? parseFloat(customFontSize) : origSize;
+            let defaultFont = targetDirection === "UniToBijoy" ? "SutonnyMJ" : "Kalpurush";
+            let finalFontName = customFontName !== "" ? customFontName : defaultFont;
+            let finalFontSize = customFontSize !== "" ? parseFloat(customFontSize) : origSize;
 
-                    let cursor = selection.insertText("", "Replace");
+            let cursor = selection.insertText("", "Replace");
+            
+            cursor.paragraphs.load("items");
+            await context.sync();
+            if (cursor.paragraphs.items.length > 0) {
+                cursor.paragraphs.items[0].alignment = origAlign;
+            }
+
+            if (targetDirection === "UniToBijoy") {
+                let chunkRegex = /([ \t\r\n\v\(\)\[\]\{\}\'\"‘“’”\.\,\:\;\!\?\-\/\$\%\+\=\<\>°_@#&\*\\a-zA-Z0-9]+)/g;
+                let textChunks = rawText.split(chunkRegex);
+
+                for (let i = 0; i < textChunks.length; i++) {
+                    let chunk = textChunks[i];
+                    if (!chunk) continue;
                     
-                    cursor.paragraphs.load("items");
-                    await context.sync();
-                    if (cursor.paragraphs.items.length > 0) {
-                        cursor.paragraphs.items[0].alignment = origAlign;
-                    }
+                    let rng = cursor.insertText(/[a-zA-Z0-9]/.test(chunk) ? chunk : convertUnicodeToBijoy(chunk), "Before");
+                    if (/[^\s]/.test(chunk)) { rng.font.name = /[a-zA-Z0-9]/.test(chunk) ? "Times New Roman" : finalFontName; }
+                    rng.font.size = finalFontSize; rng.font.bold = origBold; rng.font.italic = origItalic;
+                }
+            } else {
+                let protectedEng = [];
+                let protectRegex = /(\([A-Za-z0-9\s\-\.\_]+\)|\[[A-Za-z0-9\s\-\.\_]+\]|"[A-Za-z0-9\s\-\.\_]+"|'[A-Za-z0-9\s\-\.\_]+')/g;
+                let safeText = rawText.replace(protectRegex, function(match) { protectedEng.push(match); return "▲" + (protectedEng.length - 1) + "▲"; });
 
-                    if (targetDirection === "UniToBijoy") {
-                        let chunkRegex = /([ \t\r\n\v\(\)\[\]\{\}\'\"‘“’”\.\,\:\;\!\?\-\/\$\%\+\=\<\>°_@#&\*\\a-zA-Z0-9]+)/g;
-                        let textChunks = rawText.split(chunkRegex);
+                let converted = convertBijoyToUnicode(safeText);
+                let chunkRegex = /([ \t\r\n\v\(\)\[\]\{\}\'\"‘“’”\.\,\:\;\!\?\-\/\$\%\+\=\<\>°_@#&\*\\]+)/g;
+                let textChunks = converted.split(/(▲\d+▲)/g);
 
-                        for (let i = 0; i < textChunks.length; i++) {
-                            let chunk = textChunks[i];
-                            if (!chunk) continue;
-                            
-                            let rng = cursor.insertText(/[a-zA-Z0-9]/.test(chunk) ? chunk : convertUnicodeToBijoy(chunk), "Before");
-                            if (/[^\s]/.test(chunk)) { rng.font.name = /[a-zA-Z0-9]/.test(chunk) ? "Times New Roman" : finalFontName; }
+                for (let i = 0; i < textChunks.length; i++) {
+                    let chunk = textChunks[i];
+                    if (!chunk) continue;
+                    
+                    let match = chunk.match(/^▲(\d+)▲$/);
+                    if (match) {
+                        let engText = protectedEng[parseInt(match[1])];
+                        let rng = cursor.insertText(engText, "Before");
+                        rng.font.name = "Times New Roman"; rng.font.size = finalFontSize; rng.font.bold = origBold; rng.font.italic = origItalic;
+                    } else {
+                        let subChunks = chunk.split(chunkRegex);
+                        for (let j = 0; j < subChunks.length; j++) {
+                            let subChunk = subChunks[j];
+                            if (!subChunk) continue;
+                            let rng = cursor.insertText(subChunk, "Before");
+                            if (/[^\s]/.test(subChunk)) { rng.font.name = finalFontName; }
                             rng.font.size = finalFontSize; rng.font.bold = origBold; rng.font.italic = origItalic;
                         }
+                    }
+                }
+            }
+            await context.sync(); showStatus(`Text Converted smoothly!`);
+        });
+    } catch (error) { showStatus("Error: " + (error.message || "Unknown"), true); }
+}
+
+// --- ENGLISH FONT FIXER ENGINE ---
+async function fixEnglishFont() {
+    try {
+        await Word.run(async (context) => {
+            const selection = context.document.getSelection();
+            selection.load("text");
+            await context.sync();
+
+            const rawText = selection.text;
+            if (!rawText || !rawText.trim()) { showStatus("Please select text first!", true); return; }
+
+            let fixFontName = document.getElementById("fix-font").value.trim() || "Times New Roman";
+            let fixFontSize = document.getElementById("fix-size").value.trim();
+
+            const chunkRegex = /[ \t\(\)\[\]\{\}\'\"‘“’”\.\,\:\;\!\?\-\/\$\%\+\=\<\>°_@#&\*\\a-zA-Z0-9]+/g;
+            let matches = rawText.match(chunkRegex);
+            if (!matches) { showStatus("No English text found.", false); return; }
+
+            let uniqueMatches = [...new Set(matches)].filter(m => /[a-zA-Z0-9]/.test(m)).map(m => m.length > 255 ? m.substring(0, 255) : m).sort((a, b) => b.length - a.length);
+
+            for (let i = 0; i < uniqueMatches.length; i++) {
+                let chunk = uniqueMatches[i];
+                let searchResults = selection.search(chunk, { matchCase: true });
+                searchResults.load("items/font/name");
+                await context.sync();
+
+                for (let j = 0; j < searchResults.items.length; j++) {
+                    let item = searchResults.items[j];
+                    if (item.font.name === "BanglaOMR" || item.font.name === "ProshnaP") continue;
+                    if (item.font.name) {
+                        item.font.name = fixFontName;
+                        if(fixFontSize !== "") item.font.size = parseFloat(fixFontSize);
                     } else {
-                        let protectedEng = [];
-                        let protectRegex = /(\([A-Za-z0-9\s\-\.\_]+\)|\[[A-Za-z0-9\s\-\.\_]+\]|"[A-Za-z0-9\s\-\.\_]+"|'[A-Za-z0-9\s\-\.\_]+')/g;
-                        let safeText = rawText.replace(protectRegex, function(match) { protectedEng.push(match); return "▲" + (protectedEng.length - 1) + "▲"; });
-
-                        let converted = convertBijoyToUnicode(safeText);
-                        let chunkRegex = /([ \t\r\n\v\(\)\[\]\{\}\'\"‘“’”\.\,\:\;\!\?\-\/\$\%\+\=\<\>°_@#&\*\\]+)/g;
-                        let textChunks = converted.split(/(▲\d+▲)/g);
-
-                        for (let i = 0; i < textChunks.length; i++) {
-                            let chunk = textChunks[i];
-                            if (!chunk) continue;
-                            
-                            let match = chunk.match(/^▲(\d+)▲$/);
-                            if (match) {
-                                let engText = protectedEng[parseInt(match[1])];
-                                let rng = cursor.insertText(engText, "Before");
-                                rng.font.name = "Times New Roman"; rng.font.size = finalFontSize; rng.font.bold = origBold; rng.font.italic = origItalic;
-                            } else {
-                                let subChunks = chunk.split(chunkRegex);
-                                for (let j = 0; j < subChunks.length; j++) {
-                                    let subChunk = subChunks[j];
-                                    if (!subChunk) continue;
-                                    let rng = cursor.insertText(subChunk, "Before");
-                                    if (/[^\s]/.test(subChunk)) { rng.font.name = finalFontName; }
-                                    rng.font.size = finalFontSize; rng.font.bold = origBold; rng.font.italic = origItalic;
-                                }
+                        let chars = item.search("?", { matchWildcards: true });
+                        chars.load("items/font/name");
+                        await context.sync();
+                        for (let k = 0; k < chars.items.length; k++) {
+                            if (chars.items[k].font.name !== "BanglaOMR" && chars.items[k].font.name !== "ProshnaP") {
+                                chars.items[k].font.name = fixFontName;
+                                if(fixFontSize !== "") chars.items[k].font.size = parseFloat(fixFontSize);
                             }
                         }
                     }
-                    await context.sync(); showStatus(`Text Converted smoothly!`);
-                });
-            } catch (error) { showStatus("Error: " + (error.message || "Unknown"), true); }
+                }
+            }
+            await context.sync();
+            showStatus("English text fonts fixed safely!");
+        });
+    } catch (error) { showStatus("Error: " + (error.message || "Unknown"), true); }
+}
+
+// --- MCQ FORMATTING CORE ENGINES ---
+function sanitizeQuestionAnswers(q) {
+    if (!q || !q.options) return;
+    for (let j = 0; j < q.options.length; j++) {
+        let text = q.options[j][1];
+        if (typeof text === "string") {
+            const match = text.match(/\s+([PQRS])\s*$/i);
+            if (match) {
+                q.options[j][1] = text.replace(/\s+([PQRS])\s*$/i, "").trim();
+                if (!q.answer) {
+                    const map = { "P": "ক", "Q": "খ", "R": "গ", "S": "ঘ" };
+                    q.answer = map[match[1].toUpperCase()];
+                    q.original_answer = q.answer;
+                }
+            }
         }
+    }
+}
+
+function parseQuestions(text) {
+    let cleanText = String(text || "").replace(/([\r\n\v]+)/g, "\n");
+    let lines = cleanText.split('\n');
+    let questions = [];
+    let current = null;
+
+    function flush() {
+        if (current && current.question && current.options.length > 0) {
+            sanitizeQuestionAnswers(current);
+            questions.push(current);
+        }
+        current = null;
+    }
+
+    for (let i = 0; i < lines.length; i++) {
+        let line = lines[i].trim();
+        if (!line) continue;
+
+        let expMatch = line.match(/^\s*(?:ব্যাখ্যা|Explanation|e¨vL¨v)\s*[: \-\u2013\u2014]\s*(.+)$/i);
+        if (expMatch && current) { current.explanation = expMatch[1].trim(); continue; }
+
+        let ansMatch = line.match(/^\s*(?:সঠিক উত্তর|উত্তর|উ|Ans|Answer|mwVK DËi|DËi)\s*[:\. ]?\s*(.*)$/i);
+        if (ansMatch && current) {
+            let ansExtr = ansMatch[1].match(/[\(\[]?([ক-ঘA-DK-Na-dk-n])[\)\]]?/);
+            if (ansExtr) {
+                current.answer = normalizeAnswerLabel(ansExtr[1]);
+                current.original_answer = current.answer;
+            }
+            continue;
+        }
+
+        let qMatch = line.match(/^\s*((?:\d+|[০-৯]+))\s*[\. \)\]]\s*(.*)$/);
+        if (qMatch || /^[^\(]+?\?$/.test(line)) {
+            flush();
+            let rawQ = qMatch ? qMatch[2] : line;
+            let optPattern = /([ক-ঘK-N])[\.\) :]\s*(.+?)(?=\s+[ক-ঘK-N][\.\) :]|$)/g;
+            let optionsFound = [];
+            let questionText = rawQ;
+            
+            let firstOptIndex = rawQ.search(/(?:\s+|^)([ক-ঘK-N])[\.\) :]/);
+            if(firstOptIndex !== -1) {
+                questionText = rawQ.substring(0, firstOptIndex).trim();
+                let optionsPart = rawQ.substring(firstOptIndex).trim();
+                let match;
+                while ((match = optPattern.exec(optionsPart)) !== null) {
+                    optionsFound.push([normalizeAnswerLabel(match[1]), match[2].trim()]);
+                }
+            }
+
+            current = {
+                question: questionText,
+                questionNumber: qMatch ? qMatch[1] : null,
+                _sourceLineIndex: i,
+                options: optionsFound,
+                answer: null,
+                explanation: null,
+                original_answer: null
+            };
+            continue;
+        }
+
+        if (!current) continue;
+        let optPattern = /([ক-ঘK-N])[\.\) :]\s*(.+?)(?=\s+[ক-ঘK-N][\.\) :]|$)/g;
+        let match;
+        let foundInline = false;
+        while ((match = optPattern.exec(line)) !== null) {
+            current.options.push([normalizeAnswerLabel(match[1]), match[2].trim()]);
+            foundInline = true;
+        }
+        if (foundInline) continue;
+
+        let singleOptMatch = line.match(/^\s*\(?([ক-ঘA-DKLMNa-dklmn])\)?[. :]?\s*(.+?)$/);
+        if (singleOptMatch) {
+            current.options.push([normalizeAnswerLabel(singleOptMatch[1]), singleOptMatch[2].trim()]);
+            continue;
+        }
+        if (current.options.length > 0) {
+            current.options[current.options.length - 1][1] += " " + line;
+        } else {
+            current.question += " " + line;
+        }
+    }
+    flush();
+    return questions;
+}
+
+function shuffleOptions(question) {
+    if (!question.options || question.options.length < 2 || !question.answer) return question;
+    
+    let originalAns = question.original_answer || question.answer;
+    let correctText = null;
+    
+    for (let i = 0; i < question.options.length; i++) {
+        if (question.options[i][0] === originalAns) { correctText = question.options[i][1]; break; }
+    }
+    if (!correctText) return question;
+
+    let shuffled = question.options.slice();
+    for (let i = shuffled.length - 1; i > 0; i--) {
+        let j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+
+    let newOptions = [];
+    let newAnswer = null;
+    for (let i = 0; i < shuffled.length; i++) {
+        let newLabel = OPTION_ORDER[i] || shuffled[i][0];
+        newOptions.push([newLabel, shuffled[i][1]]);
+        if (shuffled[i][1] === correctText) { newAnswer = newLabel; }
+    }
+    
+    question.options = newOptions;
+    question.answer = newAnswer;
+    return question;
+}
+
+function mcqReadTabStopsFromOOXML(ooxml) {
+    const result = [];
+    if (!ooxml) return result;
+    const tabsBlockMatch = ooxml.match(/<w:tabs\b[^>]*>([\s\S]*?)<\/w:tabs>/i);
+    if (!tabsBlockMatch) return result;
+    const tabRegex = /<w:tab\b([^>]*?)(?:\/>|>[\s\S]*?<\/w:tab>)/gi;
+    let match;
+    while ((match = tabRegex.exec(tabsBlockMatch[1])) !== null) {
+        const attrs = match[1] || "";
+        const posMatch = attrs.match(/w:pos="([\d.]+)"/i);
+        if (!posMatch) continue;
+        const valMatch = attrs.match(/w:val="([^"]+)"/i);
+        result.push({ position: parseFloat(posMatch[1]) / 20, alignment: valMatch ? valMatch[1] : "left" });
+    }
+    return result.sort((a, b) => a.position - b.position);
+}
+
+async function mcqReadSelectedParagraphTabStops(context, paragraph) {
+    try {
+        if (!Office.context.requirements.isSetSupported("WordApi", "1.1")) return [];
+        const ooxml = paragraph.getOoxml();
+        await context.sync();
+        return mcqReadTabStopsFromOOXML(ooxml.value || "");
+    } catch (error) { return []; }
+}
+
+async function mcqGetCurrentColumnWidth(context) {
+    try {
+        if (!Office.context.requirements.isSetSupported("WordApi", "1.3")) return 350;
+        const sections = context.document.getSelection().sections;
+        sections.load("items");
+        await context.sync();
+        if (!sections.items.length) return 350;
+        
+        const pageSetup = sections.items[0].pageSetup;
+        pageSetup.load("pageWidth,leftMargin,rightMargin,gutter");
+        const columns = pageSetup.textColumns;
+        columns.load("items");
+        await context.sync();
+
+        if (columns.items.length > 0 && typeof columns.items[0].width === "number") {
+            return columns.items[0].width;
+        }
+        const width = pageSetup.pageWidth - pageSetup.leftMargin - pageSetup.rightMargin - (pageSetup.gutter || 0);
+        return width > 0 ? width : 350;
+    } catch (error) { 
+        return 350; 
+    }
+}
+
+function mcqGetOptionSlots(tabStops, columnWidth) {
+    if (!Array.isArray(tabStops) || tabStops.length < 2) return null;
+    const sorted = tabStops.filter(t => Number.isFinite(Number(t.position))).slice().sort((a, b) => a.position - b.position);
+    if (sorted.length < 2) return null;
+
+    const firstTab = sorted[0].position;
+    const secondTab = sorted[1].position;
+    if (secondTab <= firstTab) return null;
+
+    const firstSlot = secondTab - firstTab;
+    let secondSlot = null;
+
+    if (sorted.length >= 3 && sorted[2].position > secondTab) {
+        secondSlot = sorted[2].position - secondTab;
+    } else if (Number.isFinite(columnWidth) && columnWidth > secondTab) {
+        secondSlot = columnWidth - secondTab;
+    }
+
+    if (firstSlot <= 0 || !secondSlot || secondSlot <= 0) return null;
+    return { firstSlot, secondSlot };
+}
+
+function mcqMeasureTextPoints(text, fontName, fontSize, bold = false) {
+    text = String(text || "");
+    if (!text) return 0;
+    let size = parseFloat(fontSize) || 10.5;
+    const canvas = mcqMeasureTextPoints.canvas || (mcqMeasureTextPoints.canvas = document.createElement("canvas"));
+    const ctx = canvas.getContext("2d");
+    ctx.font = `${bold ? "700 " : "400 "}${size * (96 / 72)}px "${String(fontName || "Arial").replace(/["']/g, "")}"`;
+    return ctx.measureText(text).width * (72 / 96);
+}
+
+function mcqMeasureOptionWidth(option, optionFont, optionSize, textFont, textSize, bold, useSymbols, isUnicode) {
+    const labelText = option[0] || "";
+    const marker = useSymbols ? (OPTION_EXPORT_MAP[labelText] || labelText) : getStandardOptionMarker(labelText, isUnicode);
+    const markerFont = useSymbols ? optionFont : textFont;
+    const markerSize = useSymbols ? optionSize : textSize;
+    const text = String(option[1] || "").replace(/[\r\n\v]/g, " ").trim();
+    return mcqMeasureTextPoints(marker, markerFont, markerSize, bold) + mcqMeasureTextPoints(` ${text}`, textFont, textSize, bold) + 2;
+}
+
+function mcqOptionFitsSlot(option, slotWidth, optionFont, optionSize, targetFont, targetSize, bold, useSymbols, isUnicode) {
+    if (!option || !Number.isFinite(slotWidth) || slotWidth <= 0) return false;
+    return (mcqMeasureOptionWidth(option, optionFont, optionSize, targetFont, targetSize, bold, useSymbols, isUnicode) * 1.08) <= slotWidth;
+}
+
+function mcqDetectAutoOptionLayout(options, tabStops, columnWidth, optionFont, optionSize, targetFont, targetSize, bold, useSymbols, isUnicode) {
+    if (!options || options.length < 4) return { mode: "one-per-line" };
+    const slots = mcqGetOptionSlots(tabStops, columnWidth);
+    if (!slots) return { mode: "one-per-line" };
+    
+    const allFit = 
+        mcqOptionFitsSlot(options[0], slots.firstSlot, optionFont, optionSize, targetFont, targetSize, bold, useSymbols, isUnicode) &&
+        mcqOptionFitsSlot(options[1], slots.secondSlot, optionFont, optionSize, targetFont, targetSize, bold, useSymbols, isUnicode) &&
+        mcqOptionFitsSlot(options[2], slots.firstSlot, optionFont, optionSize, targetFont, targetSize, bold, useSymbols, isUnicode) &&
+        mcqOptionFitsSlot(options[3], slots.secondSlot, optionFont, optionSize, targetFont, targetSize, bold, useSymbols, isUnicode);
+    return { mode: allFit ? "two-per-line" : "one-per-line" };
+}
+
+function mcqApplyFontSafe(range, fontName, fontSize, bold, italic) {
+    if (fontName) range.font.name = fontName;
+    if (fontSize) range.font.size = fontSize;
+    range.font.bold = bold === true;
+    range.font.italic = italic === true;
+}
+
+function mcqInsertOption(paragraph, option, optionFont, optionSize, targetFont, targetSize, origBold, origItalic, leadingTab, useSymbols, isUnicode) {
+    if (!option) return;
+    const labelText = option[0] || "";
+    const label = useSymbols ? (OPTION_EXPORT_MAP[labelText] || labelText) : getStandardOptionMarker(labelText, isUnicode);
+    
+    let text = String(option[1] || "").replace(/[\r\n\v]/g, " ").trim();
+    const match = text.match(/\s+([PQRS])\s*$/i);
+    if (match) text = text.replace(/\s+([PQRS])\s*$/i, "").trim();
+    
+    if (leadingTab) {
+        let tabRange = paragraph.insertText("\t", "End");
+        mcqApplyFontSafe(tabRange, targetFont, targetSize, false, false);
+    }
+    
+    const markerRange = paragraph.insertText(label, "End");
+    mcqApplyFontSafe(markerRange, useSymbols ? optionFont : targetFont, useSymbols ? optionSize : targetSize, origBold, origItalic);
+    
+    const textRange = paragraph.insertText(` ${text}`, "End");
+    mcqApplyFontSafe(textRange, targetFont, targetSize, origBold, origItalic);
+}
+
+function mcqInsertNormalAnswer(paragraph, answer, answerSize, origItalic, useSymbols, targetFont, targetSize, isUnicode) {
+    if (!answer) return;
+    const marker = useSymbols ? (ANSWER_EXPORT_MAP[answer] || answer) : getStandardAnswerMarker(answer, isUnicode);
+    paragraph.insertText("\t", "End");
+    const answerRange = paragraph.insertText(marker, "End");
+    mcqApplyFontSafe(answerRange, useSymbols ? "ProshnaP" : targetFont, useSymbols ? answerSize : targetSize, false, origItalic);
+}
+
+function mcqInsertNormalOptions(anchorRange, question, layout, optionFont, optionSize, targetFont, targetSize, origAlign, origBold, origItalic, answerSize, useSymbols, isUnicode) {
+    const count = Math.min(4, question.options.length);
+    if (layout.mode === "two-per-line") {
+        for (let j = 0; j < count; j += 2) {
+            const paragraph = anchorRange.insertParagraph("", "Before");
+            paragraph.alignment = origAlign;
+            
+            mcqInsertOption(paragraph, question.options[j], optionFont, optionSize, targetFont, targetSize, origBold, origItalic, true, useSymbols, isUnicode);
+            if (question.options[j + 1]) {
+                let midTab = paragraph.insertText("\t", "End");
+                mcqApplyFontSafe(midTab, targetFont, targetSize, false, false);
+                mcqInsertOption(paragraph, question.options[j + 1], optionFont, optionSize, targetFont, targetSize, origBold, origItalic, false, useSymbols, isUnicode);
+            }
+            if (j + 1 >= 3 || j + 1 === count - 1) {
+                if (j + 1 === 3) mcqInsertNormalAnswer(paragraph, question.answer, answerSize, origItalic, useSymbols, targetFont, targetSize, isUnicode);
+            }
+        }
+    } else {
+        for (let j = 0; j < count; j++) {
+            const paragraph = anchorRange.insertParagraph("", "Before");
+            paragraph.alignment = origAlign;
+            
+            mcqInsertOption(paragraph, question.options[j], optionFont, optionSize, targetFont, targetSize, origBold, origItalic, true, useSymbols, isUnicode);
+            if (j === 3) mcqInsertNormalAnswer(paragraph, question.answer, answerSize, origItalic, useSymbols, targetFont, targetSize, isUnicode);
+        }
+    }
+}
+
+function mcqInsertSmartOptions(anchorRange, question, layout, optionFont, optionSize, targetFont, targetSize, origAlign, origBold, origItalic, useSymbols, isUnicode) {
+    const count = Math.min(4, question.options.length);
+    if (layout.mode === "two-per-line") {
+        for (let j = 0; j < count; j += 2) {
+            const paragraph = anchorRange.insertParagraph("", "Before");
+            paragraph.alignment = origAlign;
+            
+            mcqInsertOption(paragraph, question.options[j], optionFont, optionSize, targetFont, targetSize, origBold, origItalic, true, useSymbols, isUnicode);
+            if (question.options[j + 1]) {
+                let midTab = paragraph.insertText("\t", "End");
+                mcqApplyFontSafe(midTab, targetFont, targetSize, false, false);
+                mcqInsertOption(paragraph, question.options[j + 1], optionFont, optionSize, targetFont, targetSize, origBold, origItalic, false, useSymbols, isUnicode);
+            }
+        }
+    } else {
+        for (let j = 0; j < count; j++) {
+            const paragraph = anchorRange.insertParagraph("", "Before");
+            paragraph.alignment = origAlign;
+            mcqInsertOption(paragraph, question.options[j], optionFont, optionSize, targetFont, targetSize, origBold, origItalic, true, useSymbols, isUnicode);
+        }
+    }
+}
+
+function mcqInsertNormalExplanation(anchorRange, explanation, isUnicode, targetFont, origSize, origAlign, origBold, origItalic) {
+    if (!explanation) return;
+    const label = isUnicode ? "ব্যাখ্যা: " : "e¨vL¨v: ";
+    const safe = String(explanation).replace(/[\r\n\v]/g, " ").trim();
+    const paragraph = anchorRange.insertParagraph(`${label}${safe}`, "Before");
+    mcqApplyFontSafe(paragraph, targetFont, origSize, origBold, origItalic);
+    paragraph.alignment = origAlign;
+}
+
+function mcqInsertSmartAnswerPage(anchorRange, questions, isUnicode, targetFont, origSize, origAlign, origBold, origItalic, answerSize, useSymbols) {
+    anchorRange.insertBreak("Page", "Before");
+    const header = isUnicode ? "সঠিক উত্তর ও ব্যাখ্যা" : "mwVK DËi I e¨vL¨v";
+    const headerPara = anchorRange.insertParagraph(header, "Before");
+    mcqApplyFontSafe(headerPara, targetFont, 12, true, false);
+    headerPara.alignment = "Centered";
+    
+    for (let i = 0; i < questions.length; i++) {
+        const q = questions[i];
+        const number = isUnicode ? toBanglaNumber(i + 1) : i + 1;
+        const label = isUnicode ? "উত্তর: " : "DËi: ";
+        const answerPara = anchorRange.insertParagraph(`${number}. ${label}`, "Before");
+        mcqApplyFontSafe(answerPara, targetFont, origSize, origBold, origItalic);
+        answerPara.alignment = origAlign;
+        
+        let detectedAnswer = q.answer;
+        if (q.options && q.options.length > 0) {
+            const lastOpt = q.options[q.options.length - 1];
+            if (typeof lastOpt[1] === "string") {
+                const match = lastOpt[1].match(/\s+([PQRS])\s*$/i);
+                if (match && !detectedAnswer) {
+                    const map = { "P": "ক", "Q": "খ", "R": "গ", "S": "ঘ" };
+                    detectedAnswer = map[match[1].toUpperCase()];
+                }
+            }
+        }
+        if (detectedAnswer) {
+            if (useSymbols) {
+                const ansMap = { "P": "K", "Q": "L", "R": "M", "S": "N", "ক": "P", "খ": "Q", "গ": "R", "ঘ": "S" };
+                const marker = ansMap[detectedAnswer] || detectedAnswer;
+                const range = answerPara.insertText(marker, "End");
+                mcqApplyFontSafe(range, "ProshnaP", answerSize, false, origItalic);
+            } else {
+                const valMap = { "ক": "K", "খ": "L", "গ": "M", "ঘ": "N" };
+                const normAns = normalizeAnswerLabel(detectedAnswer);
+                const finalVal = isUnicode ? normAns : (valMap[normAns] || normAns);
+                const range = answerPara.insertText(finalVal, "End");
+                mcqApplyFontSafe(range, targetFont, origSize, false, origItalic);
+            }
+        }
+        if (q.explanation) {
+            const expLabel = isUnicode ? " ব্যাখ্যা: " : " e¨vL¨v: ";
+            const safe = String(q.explanation).replace(/[\r\n\v]/g, " ").trim();
+            const expPara = anchorRange.insertParagraph(`${expLabel}${safe}`, "Before");
+            mcqApplyFontSafe(expPara, targetFont, origSize, origBold, origItalic);
+            expPara.alignment = origAlign;
+        }
+    }
+}
+
+async function formatSelectedText(type) {
+    try {
+        await Word.run(async (context) => {
+            const selection = context.document.getSelection();
+            const paragraphs = selection.paragraphs;
+            paragraphs.load("items");
+            await context.sync();
+
+            let origAlign = "Left", origBold = false, origItalic = false, originalParagraph = null;
+            if (paragraphs.items.length) {
+                originalParagraph = paragraphs.items[0];
+                originalParagraph.load("alignment, font/bold, font/italic");
+                await context.sync();
+                origAlign = originalParagraph.alignment || "Left";
+                origBold = originalParagraph.font.bold === true;
+                origItalic = originalParagraph.font.italic === true;
+            }
+            
+            selection.load("text, font/size");
+            await context.sync();
+            const text = selection.text || "";
+            const origSize = Number(selection.font.size) || 10.5;
+            
+            if (!text.trim()) { showStatus("Please select some text in the document first!", true); return; }
+            let tabStops = [];
+            if (originalParagraph) tabStops = await mcqReadSelectedParagraphTabStops(context, originalParagraph);
+            const columnWidth = await mcqGetCurrentColumnWidth(context);
+            
+            const isUnicode = /[\u0980-\u09FF]/.test(text);
+            const targetFont = isUnicode ? "Kalpurush" : "SutonnyMJ";
+            
+            let questions = parseQuestions(text);
+            if (!questions.length) { showStatus("No valid questions found in selection!", true); return; }
+            
+            const shuffleElement = document.getElementById("shuffleCheck");
+            if (shuffleElement && shuffleElement.checked) questions = questions.map(q => shuffleOptions(q));
+            
+            const normStyle = document.getElementById("norm-marker-style");
+            const smartStyle = document.getElementById("smart-marker-style");
+            const useSymbols = type === "normal" 
+                ? (!normStyle || normStyle.value !== "text") 
+                : (!smartStyle || smartStyle.value !== "text");
+
+            const optFontElement = document.getElementById("norm-opt-font");
+            const optSizeElement = document.getElementById("norm-opt-size");
+            const normalAnswerElement = document.getElementById("norm-ans-size");
+            const smartAnswerElement = document.getElementById("smart-ans-size");
+            
+            const optionFont = optFontElement && optFontElement.value.trim() ? optFontElement.value.trim() : "BanglaOMR";
+            const optionSize = optSizeElement && parseFloat(optSizeElement.value) > 0 ? parseFloat(optSizeElement.value) : 9;
+            const normalAnswerSize = normalAnswerElement && parseFloat(normalAnswerElement.value) > 0 ? parseFloat(normalAnswerElement.value) : 10;
+            const smartAnswerSize = smartAnswerElement && parseFloat(smartAnswerElement.value) > 0 ? parseFloat(smartAnswerElement.value) : 10;
+            
+            const anchorRange = selection.insertText(" ", "Replace");
+            
+            for (let i = 0; i < questions.length; i++) {
+                const q = questions[i];
+                const safeQuestion = String(q.question || "").replace(/[\r\n\v]/g, " ").trim();
+                const qNum = isUnicode ? toBanglaNumber(i + 1) : i + 1;
+                
+                const qPara = anchorRange.insertParagraph(`${qNum}. ${safeQuestion}`, "Before");
+                mcqApplyFontSafe(qPara, targetFont, origSize, origBold, origItalic);
+                qPara.alignment = origAlign;
+                
+                const layout = mcqDetectAutoOptionLayout(q.options, tabStops, columnWidth, optionFont, optionSize, targetFont, origSize, origBold, useSymbols, isUnicode);
+                
+                if (type === "normal") {
+                    mcqInsertNormalOptions(anchorRange, q, layout, optionFont, optionSize, targetFont, origSize, origAlign, origBold, origItalic, normalAnswerSize, useSymbols, isUnicode);
+                    mcqInsertNormalExplanation(anchorRange, q.explanation, isUnicode, targetFont, origSize, origAlign, origBold, origItalic);
+                } else if (type === "smart") {
+                    mcqInsertSmartOptions(anchorRange, q, layout, optionFont, optionSize, targetFont, origSize, origAlign, origBold, origItalic, useSymbols, isUnicode);
+                }
+            }
+            if (type === "smart") mcqInsertSmartAnswerPage(anchorRange, questions, isUnicode, targetFont, origSize, origAlign, origBold, origItalic, smartAnswerSize, useSymbols);
+            
+            anchorRange.delete();
+            await context.sync();
+            showStatus(`${questions.length} MCQs formatted successfully!`);
+        });
+    } catch (error) { showStatus("Error: " + (error.message || "Unknown error"), true); }
+}
+
+async function formatQuestionsMacro() {
+    try {
+        await Word.run(async (context) => {
+            const selection = context.document.getSelection();
+            const paragraphs = selection.paragraphs;
+            paragraphs.load("items");
+            await context.sync();
+            
+            if (paragraphs.items.length === 0) { showStatus("Please select text first.", true); return; }
+            
+            let numStyle = document.getElementById("num-style").value;
+            let matchingParagraphs = [];
+            for (let i = 0; i < paragraphs.items.length; i++) { paragraphs.items[i].load("text"); }
+            await context.sync();
+            
+            for (let i = 0; i < paragraphs.items.length; i++) {
+                let p = paragraphs.items[i];
+                let text = p.text.trim();
+                if (text.length < 2) continue;
+                if (/^\s*\(?[কখগঘA-D]\)?[\.\)।:]\s+/i.test(text)) continue;
+                if (/^\s*(?:সঠিক উত্তর|উ|উত্তর|Ans|Answer|mwVK DËi|DËi|ব্যাখ্যা|Explanation|e¨vL¨v)/i.test(text)) continue;
+                
+                let hasNumber = /^\s*(?:\d+|[০-৯]+|[a-zA-Z]|[iIvVxXlLcCdDmMoO]+)\s*[\.\)।]/.test(text);
+                let lastChar = text.slice(-1);
+                let endsWithPunctuation = ["?", "؟", "—", "-", ":"].includes(lastChar);
+                
+                if (hasNumber || endsWithPunctuation || text.includes("?")) matchingParagraphs.push(p);
+            }
+
+            if (matchingParagraphs.length === 0) { showStatus("No questions detected.", true); return; }
+
+            if (numStyle.startsWith("auto-")) {
+                let list = matchingParagraphs[0].startNewList();
+                list.load("id");
+                await context.sync();
+                
+                let listLevelType = Word.ListNumbering.arabic;
+                if (numStyle === "auto-roman") listLevelType = Word.ListNumbering.lowerRoman;
+                if (numStyle === "auto-alpha") listLevelType = Word.ListNumbering.lowerLetter;
+                
+                list.setLevelNumbering(0, listLevelType);
+                
+                for (let i = 0; i < matchingParagraphs.length; i++) {
+                    let p = matchingParagraphs[i];
+                    p.font.bold = true;
+                    if (i > 0) p.attachToList(list.id, 0);
+                }
+                await context.sync();
+            } else {
+                let qCount = 0;
+                for (let i = 0; i < matchingParagraphs.length; i++) {
+                    let p = matchingParagraphs[i];
+                    p.font.bold = true; 
+                    
+                    let text = p.text.trim();
+                    let hasNumber = /^\s*(?:\d+|[০-৯]+|[a-zA-Z]|[iIvVxXlLcCdDmMoO]+)\s*[\.\)।]/.test(text);
+                    
+                    if (!hasNumber) {
+                        let numText = getSequenceString(qCount, numStyle);
+                        let numRange = p.insertText(numText, "Start");
+                        numRange.font.bold = true;
+                    }
+                    qCount++;
+                }
+                await context.sync();
+            }
+            showStatus(`Numbered and Bolded ${matchingParagraphs.length} Questions!`);
+        });
+    } catch (error) { showStatus("Error: " + (error.message || "Unknown"), true); }
+}
 
 // ==========================================
 // DUPLICATE FINDER LOGIC
@@ -929,7 +1514,7 @@ function dupCandidateSignature(mcq, opts) {
         })
     ).filter(t => t.length > 1);
 
-    return `${tokens.length}|${tokens.slice(0, 4).join(" ")}`;
+    return `${tokens.length}\vert{}${tokens.slice(0, 4).join(" ")}`;
 }
 function dupMakeGroups(matches, count) {
     const parent = Array.from({length: count}, (_, i) => i);
@@ -1065,6 +1650,7 @@ function compareDuplicateQuestions(aId, bId) {
     const old = document.getElementById("duplicateComparePanel"); if (old) old.remove(); document.body.insertAdjacentHTML("beforeend", compareHtml);
 }
 
+// --- QUESTION BANK LOGIC ---
 function updateBankCount() {
     let bank = JSON.parse(localStorage.getItem("mcq_studio_bank") || "[]");
     let countEl = document.getElementById("bank-count");
@@ -1229,6 +1815,7 @@ function deleteFromBank(id, btnElement) {
     showStatus("Question removed from Bank!");
 }
 
+// --- SET GENERATOR & EXAM PAPER GENERATOR ---
 function mcqInsertSetOptionsWithAnswer(anchorRange, question, layout, optionFont, optionSize, targetFont, targetSize, origAlign, answerSize, useSymbols, isUnicode) {
     const count = Math.min(4, (question.options || []).length);
     let lastParagraph = null;
@@ -1562,6 +2149,7 @@ async function generateExamPaper() {
     } catch (error) { showStatus("Error: " + (error.message || "Unknown"), true); }
 }
 
+// --- BUTTON EVENT WIRING ---
 let _eventsBound = false;
 
 function bindAppEvents() {
@@ -1737,7 +2325,6 @@ btnExtractText.onclick = async () => {
 
     setLoading("btnExtractText", true);
 
-    // 1. Server-Authoritative Quota Check via Supabase RPC
     if (supabaseClient && FOLIORA_STATE.user && FOLIORA_STATE.user.isLoggedIn) {
         try {
             const { data: quotaAuth, error: rpcError } = await supabaseClient.rpc('consume_ocr_page');
@@ -1780,7 +2367,6 @@ btnExtractText.onclick = async () => {
         updateOcrQuotaDisplay();
     }
 
-    // 2. Document Reconstruction via AI Vision
     try {
         const prompt = `You are the document understanding and formatting engine of Foliora OCR Studio.
 
@@ -1851,7 +2437,7 @@ If answer or explanation does not exist, use null.`;
             generationConfig: { responseMimeType: "application/json" }
         };
 
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${encodeURIComponent(apiKey)}`;
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${encodeURIComponent(apiKey)}`;
         const response = await fetch(url, { 
             method: "POST", 
             headers: { "Content-Type": "application/json" }, 
