@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0" xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="TaskPaneApp">
-  <Id>9b2d7f4e-2a1c-4c6e-9d7a-b5f3a8c9e420</Id><Version>1.1.0.0</Version><ProviderName>Foliora</ProviderName><DefaultLocale>en-US</DefaultLocale>
+  <Id>9b2d7f4e-2a1c-4c6e-9d7a-b5f3a8c9e420</Id><Version>1.2.0.0</Version><ProviderName>Foliora</ProviderName><DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="Foliora Studio"/><Description DefaultValue="A modern Microsoft Word add-in for Bangla publication workflows, including MCQ formatting, Bangla conversion, OCR, and document tools."/>
   <IconUrl DefaultValue="https://foliora-gamma.vercel.app/icon-32.png"/><HighResolutionIconUrl DefaultValue="https://foliora-gamma.vercel.app/icon-64.png"/>
   <SupportUrl DefaultValue="https://foliora-gamma.vercel.app/support.html"/><AppDomains><AppDomain>https://foliora-gamma.vercel.app</AppDomain></AppDomains>
@@ -11,9 +11,9 @@
     <Hosts><Host xsi:type="Document"><DesktopFormFactor><ExtensionPoint xsi:type="PrimaryCommandSurface"><OfficeTab id="TabHome"><Group id="FolioraGroup">
       <Label resid="residGroupLabel"/><Icon><bt:Image size="16" resid="icon16"/><bt:Image size="32" resid="icon32"/><bt:Image size="80" resid="icon64"/></Icon>
       <Control xsi:type="Button" id="FolioraOpenButton"><Label resid="residButtonLabel"/><Supertip><Title resid="residButtonLabel"/><Description resid="residButtonTooltip"/></Supertip>
-      <Icon><bt:Image size="16" resid="icon16"/><bt:Image size="32" resid="icon32"/><bt:Image size="80" resid="icon64"/></Icon><Action xsi:type="ShowTaskpane"><SourceLocation resid="residTaskpaneUrl"/></Action></Control>
+      <Icon><bt:Image size="16" resid="icon16"/><bt:Image size="32" resid="icon32"/><bt:Image size="80" resid="icon80"/></Icon><Action xsi:type="ShowTaskpane"><SourceLocation resid="residTaskpaneUrl"/></Action></Control>
     </Group></OfficeTab></ExtensionPoint></DesktopFormFactor></Host></Hosts>
-    <Resources><bt:Images><bt:Image id="icon16" DefaultValue="https://foliora-gamma.vercel.app/icon-16.png"/><bt:Image id="icon32" DefaultValue="https://foliora-gamma.vercel.app/icon-32.png"/><bt:Image id="icon64" DefaultValue="https://foliora-gamma.vercel.app/icon-80.png"/></bt:Images>
+    <Resources><bt:Images><bt:Image id="icon16" DefaultValue="https://foliora-gamma.vercel.app/icon-16.png"/><bt:Image id="icon32" DefaultValue="https://foliora-gamma.vercel.app/icon-32.png"/><bt:Image id="icon80" DefaultValue="https://foliora-gamma.vercel.app/icon-80.png"/></bt:Images>
       <bt:Urls><bt:Url id="residTaskpaneUrl" DefaultValue="https://foliora-gamma.vercel.app/index.html"/></bt:Urls>
       <bt:ShortStrings><bt:String id="residGroupLabel" DefaultValue="Foliora"/><bt:String id="residButtonLabel" DefaultValue="Open Foliora Studio"/></bt:ShortStrings>
       <bt:LongStrings><bt:String id="residDescription" DefaultValue="Foliora Studio brings Bangla publication and Word productivity tools into one modern workspace."/><bt:String id="residButtonTooltip" DefaultValue="Open Foliora Studio in the Word task pane."/></bt:LongStrings>
