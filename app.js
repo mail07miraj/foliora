@@ -922,9 +922,6 @@ function bindAppEvents() {
     switchProduct('mcq');
     updateBankCount();
 
-    const savedKey = localStorage.getItem("gemini_api_key");
-    const keyInput = document.getElementById("gemini-api-key");
-    if (keyInput && savedKey) keyInput.value = savedKey;
 }
 
 if (typeof Office !== "undefined" && typeof Office.onReady === "function") {
@@ -932,18 +929,6 @@ if (typeof Office !== "undefined" && typeof Office.onReady === "function") {
 } else {
     window.onload = bindAppEvents;
 }
-
-document.getElementById("btnSaveApiKey").onclick = () => {
-    const key = document.getElementById("gemini-api-key").value.trim();
-    if(key) {
-        localStorage.setItem("gemini_api_key", key);
-        showStatus("API Key Saved!");
-        toggleSettings("api-key-settings");
-    } else {
-        localStorage.removeItem("gemini_api_key");
-        showStatus("API Key Removed!");
-    }
-};
 
 const visionFileInput = document.getElementById('vision-file-input');
 const dropzone = document.getElementById('dropzone');
@@ -1007,155 +992,72 @@ btnRemoveImage.onclick = () => {
 };
 
 btnExtractText.onclick = async () => {
-    let apiKey = localStorage.getItem("gemini_api_key");
-    if(!apiKey) { 
-        showStatus("Please save your Gemini API Key first!", true); 
-        toggleSettings('api-key-settings'); 
-        return; 
+    if (!currentVisionImageBase64 || !currentVisionImageMime) {
+        showStatus("Please upload or paste an image first.", true);
+        return;
     }
-    if (!currentVisionImageBase64 || !currentVisionImageMime) { 
-        showStatus("Please upload or paste an image first.", true); 
-        return; 
+    if (currentVisionImageBase64.length > 12 * 1024 * 1024) {
+        showStatus("This image is very large. Please use a smaller image.", true);
+        return;
     }
-    if (currentVisionImageBase64.length > 12 * 1024 * 1024) { 
-        showStatus("This image is very large. Please use a smaller image.", true); 
-        return; 
+    if (!supabaseClient || !FOLIORA_STATE.user || !FOLIORA_STATE.user.isLoggedIn) {
+        showStatus("Please sign in to use AI OCR.", true);
+        openAuthModal('signin');
+        return;
     }
 
     setLoading("btnExtractText", true);
 
-    if (supabaseClient && FOLIORA_STATE.user && FOLIORA_STATE.user.isLoggedIn) {
-        try {
-            const { data: quotaAuth, error: rpcError } = await supabaseClient.rpc('consume_ocr_page');
-
-            if (rpcError) {
-                showStatus("Server verification failed: " + rpcError.message, true);
-                setLoading("btnExtractText", false);
-                return;
-            }
-
-            if (!quotaAuth.allowed) {
-                showStatus("Monthly OCR limit reached (" + quotaAuth.used + "/" + quotaAuth.limit + "). Please upgrade your plan.", true);
-                FOLIORA_STATE.ocrQuota.used = quotaAuth.used;
-                FOLIORA_STATE.ocrQuota.limit = quotaAuth.limit;
-                updateOcrQuotaDisplay();
-                switchProduct('ocr');
-                setLoading("btnExtractText", false);
-                return;
-            }
-
-            FOLIORA_STATE.ocrQuota.used = quotaAuth.used;
-            FOLIORA_STATE.ocrQuota.limit = quotaAuth.limit;
-            saveFolioraPersistedState();
-            updateOcrQuotaDisplay();
-
-        } catch (e) {
-            showStatus("Error verifying quota with server.", true);
-            setLoading("btnExtractText", false);
-            return;
-        }
-    } else {
-        if (FOLIORA_STATE.ocrQuota.used >= FOLIORA_STATE.ocrQuota.limit) {
-            showStatus("Monthly OCR quota reached! Please sign in or upgrade.", true);
-            switchProduct('ocr');
-            setLoading("btnExtractText", false);
-            return;
-        }
-        FOLIORA_STATE.ocrQuota.used += 1;
-        saveFolioraPersistedState();
-        updateOcrQuotaDisplay();
-    }
-
     try {
-        const prompt = `You are the document understanding and formatting engine of Foliora OCR Studio.
+        // Always obtain the current Supabase session token before calling our
+        // server-side OCR proxy. The Gemini API key never reaches the browser.
+        const { data: sessionData, error: sessionError } = await supabaseClient.auth.getSession();
+        const accessToken = sessionData?.session?.access_token;
+        if (sessionError || !accessToken) {
+            throw new Error("Your session has expired. Please sign in again.");
+        }
 
-Your job is to analyze user-provided documents, images, PDFs, screenshots, clipboard text, and other extracted text, then reconstruct the content while preserving the original document's structure, order, wording, and formatting relationships.
-
-==================================================
-CORE PRINCIPLE
-==================================================
-The original document is the source of truth.
-Do not rewrite, summarize, improve, correct, reorder, or reinterpret the content.
-Extract and reconstruct the content exactly as it appears in the source as much as possible.
-Preserve: Original wording, Original Bangla text, Bangla conjunct characters, Names, Numbers, Question numbering, Option labels, Punctuation, Mathematical expressions, Symbols, English words, Headings, Paragraphs, Lists, Tables, Line/section relationships, Original content order.
-Never invent missing content.
-Never silently correct uncertain OCR.
-If a character or word is uncertain, preserve the closest readable source text and mark the uncertainty.
-
-==================================================
-MCQ DETECTION & STRUCTURE
-==================================================
-If the document contains MCQs, identify them as MCQs.
-An MCQ normally contains: 1. Question serial/number, 2. Question text, 3. Multiple options, 4. Correct answer, 5. Optional explanation.
-
-For every detected MCQ:
-- Preserve the original question serial number exactly as it appears.
-- Preserve the original question and option text/labels exactly.
-- Do NOT shuffle options or renumber questions.
-
-When converting an MCQ into structured content, maintain this logical order:
-QUESTION -> OPTIONS -> ANSWER -> EXPLANATION (if present)
-
-==================================================
-OUTPUT FORMAT (JSON ONLY)
-==================================================
-Return valid JSON only. Do not wrap in markdown \`\`\`json.
-Use this exact structure:
-{
-  "document": {
-    "title": "",
-    "content": [
-      {
-        "type": "heading",
-        "text": "",
-        "confidence": "high"
-      },
-      {
-        "type": "paragraph",
-        "text": "",
-        "confidence": "high"
-      },
-      {
-        "type": "mcq",
-        "serial": "",
-        "question": "",
-        "options": [
-          { "label": "", "text": "" }
-        ],
-        "answer": { "text": "", "confidence": "high" },
-        "explanation": { "text": "", "confidence": "high" },
-        "confidence": "high"
-      }
-    ]
-  }
-}
-If answer or explanation does not exist, use null.`;
-
-        const requestBody = {
-            contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType: currentVisionImageMime, data: currentVisionImageBase64 } }] }],
-            generationConfig: { responseMimeType: "application/json" }
-        };
-
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${encodeURIComponent(apiKey)}`;
-        const response = await fetch(url, { 
-            method: "POST", 
-            headers: { "Content-Type": "application/json" }, 
-            body: JSON.stringify(requestBody) 
+        const response = await fetch("/api/ocr", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": "Bearer " + accessToken
+            },
+            body: JSON.stringify({
+                mimeType: currentVisionImageMime,
+                data: currentVisionImageBase64
+            })
         });
+
         const responseText = await response.text();
+        let payload = null;
+        try { payload = JSON.parse(responseText); } catch (e) {}
 
         if (!response.ok) {
-            let errorMsg = `HTTP Error ${response.status}`;
-            try { errorMsg = JSON.parse(responseText).error?.message || errorMsg; } catch(e) { }
-            throw new Error(errorMsg);
+            const message = payload?.error || `OCR server error (HTTP ${response.status})`;
+            if (payload?.quota) {
+                FOLIORA_STATE.ocrQuota.used = payload.quota.used;
+                FOLIORA_STATE.ocrQuota.limit = payload.quota.limit;
+                saveFolioraPersistedState();
+                updateOcrQuotaDisplay();
+            }
+            throw new Error(message);
         }
 
-        let rawJsonOutput = JSON.parse(responseText).candidates?.[0]?.content?.parts?.[0]?.text;
+        if (payload?.quota) {
+            FOLIORA_STATE.ocrQuota.used = payload.quota.used;
+            FOLIORA_STATE.ocrQuota.limit = payload.quota.limit;
+            saveFolioraPersistedState();
+            updateOcrQuotaDisplay();
+        }
+
+        let rawJsonOutput = payload?.text;
         if (!rawJsonOutput) throw new Error("AI returned an empty response.");
-        rawJsonOutput = rawJsonOutput.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+        rawJsonOutput = rawJsonOutput.replace(/^\`\`\`(?:json)?\s*/i, "").replace(/\s*\`\`\`$/i, "").trim();
 
         let parsedDocument;
-        try { parsedDocument = JSON.parse(rawJsonOutput); } catch(e) { throw new Error("Failed to parse AI output."); }
+        try { parsedDocument = JSON.parse(rawJsonOutput); }
+        catch (e) { throw new Error("Failed to parse AI output."); }
 
         await Word.run(async (context) => {
             const selection = context.document.getSelection();
@@ -1166,10 +1068,14 @@ If answer or explanation does not exist, use null.`;
                 if (!text) return;
                 let lines = String(text).split('\n');
                 let p = targetRange.insertParagraph(lines[0].trim(), "Before");
-                p.font.name = "Kalpurush"; p.font.size = size; p.font.bold = isBold;
+                p.font.name = "Kalpurush";
+                p.font.size = size;
+                p.font.bold = isBold;
                 for (let i = 1; i < lines.length; i++) {
-                    let brRange = p.insertText("\n" + lines[i].trim(), "End"); 
-                    brRange.font.name = "Kalpurush"; brRange.font.size = size; brRange.font.bold = isBold;
+                    let brRange = p.insertText("\n" + lines[i].trim(), "End");
+                    brRange.font.name = "Kalpurush";
+                    brRange.font.size = size;
+                    brRange.font.bold = isBold;
                 }
             };
 
@@ -1179,21 +1085,27 @@ If answer or explanation does not exist, use null.`;
                 else if (item.type === "mcq") {
                     insertLine(`${item.serial ? item.serial + ' ' : ''}${item.question}`.trim(), 11, true);
                     if (item.options && Array.isArray(item.options)) {
-                        for (const opt of item.options) insertLine(`${opt.label ? opt.label + ' ' : ''}${opt.text}`.trim(), 11, false);
+                        for (const opt of item.options) {
+                            insertLine(`${opt.label ? opt.label + ' ' : ''}${opt.text}`.trim(), 11, false);
+                        }
                     }
-                    if (item.answer && item.answer.text) insertLine(item.answer.text.startsWith("উত্তর") ? item.answer.text : `উত্তর: ${item.answer.text}`, 11, true);
-                    if (item.explanation && item.explanation.text) insertLine(item.explanation.text.startsWith("ব্যাখ্যা") ? item.explanation.text : `ব্যাখ্যা: ${item.explanation.text}`, 11, false);
+                    if (item.answer && item.answer.text) {
+                        insertLine(item.answer.text.startsWith("উত্তর") ? item.answer.text : `উত্তর: ${item.answer.text}`, 11, true);
+                    }
+                    if (item.explanation && item.explanation.text) {
+                        insertLine(item.explanation.text.startsWith("ব্যাখ্যা") ? item.explanation.text : `ব্যাখ্যা: ${item.explanation.text}`, 11, false);
+                    }
                 }
             }
+
             targetRange.delete();
             await context.sync();
-
             showStatus("Smart AI Extraction Completed!");
         });
-    } catch (error) { 
-        showStatus("Error: " + (error.message || "Unknown issue"), true); 
-    } finally { 
-        setLoading("btnExtractText", false); 
+    } catch (error) {
+        showStatus("Error: " + (error.message || "Unknown issue"), true);
+    } finally {
+        setLoading("btnExtractText", false);
     }
 };
 
