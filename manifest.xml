@@ -13,7 +13,7 @@
       <Control xsi:type="Button" id="FolioraOpenButton"><Label resid="residButtonLabel"/><Supertip><Title resid="residButtonLabel"/><Description resid="residButtonTooltip"/></Supertip>
       <Icon><bt:Image size="16" resid="icon16"/><bt:Image size="32" resid="icon32"/><bt:Image size="80" resid="icon64"/></Icon><Action xsi:type="ShowTaskpane"><SourceLocation resid="residTaskpaneUrl"/></Action></Control>
     </Group></OfficeTab></ExtensionPoint></DesktopFormFactor></Host></Hosts>
-    <Resources><bt:Images><bt:Image id="icon16" DefaultValue="https://foliora-gamma.vercel.app/icon-32.png"/><bt:Image id="icon32" DefaultValue="https://foliora-gamma.vercel.app/icon-32.png"/><bt:Image id="icon64" DefaultValue="https://foliora-gamma.vercel.app/icon-64.png"/></bt:Images>
+    <Resources><bt:Images><bt:Image id="icon16" DefaultValue="https://foliora-gamma.vercel.app/icon-16.png"/><bt:Image id="icon32" DefaultValue="https://foliora-gamma.vercel.app/icon-32.png"/><bt:Image id="icon64" DefaultValue="https://foliora-gamma.vercel.app/icon-80.png"/></bt:Images>
       <bt:Urls><bt:Url id="residTaskpaneUrl" DefaultValue="https://foliora-gamma.vercel.app/index.html"/></bt:Urls>
       <bt:ShortStrings><bt:String id="residGroupLabel" DefaultValue="Foliora"/><bt:String id="residButtonLabel" DefaultValue="Open Foliora Studio"/></bt:ShortStrings>
       <bt:LongStrings><bt:String id="residDescription" DefaultValue="Foliora Studio brings Bangla publication and Word productivity tools into one modern workspace."/><bt:String id="residButtonTooltip" DefaultValue="Open Foliora Studio in the Word task pane."/></bt:LongStrings>
