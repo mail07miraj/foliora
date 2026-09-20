@@ -1200,14 +1200,18 @@ If answer or explanation does not exist, use null.`;
 // --- তাৎক্ষণিক অ্যাপ ইনিশিয়ালাইজেশন (বাটনে ক্লিক ছাড়াই স্ক্রিন লোড হবে) ---
 function startApp() {
     bindAppEvents();
-    // ডিফল্টভাবে সাথে সাথে MCQ Studio ওপেন করবে
-    switchProduct(FOLIORA_STATE.activeProduct || 'mcq');
+    loadFolioraPersistedState();
+    initSupabase();
+    
+    // অ্যাপ ওপেন হওয়া মাত্রই কোনো ক্লিক ছাড়াই তাৎক্ষণিকভাবে সঠিক স্টেট (লক স্ক্রিন বা মেইন অপশন) রেন্ডার করবে
+    switchProduct('mcq');
 
     if (typeof Office !== "undefined" && typeof Office.onReady === "function") {
         Office.onReady(() => {
-            // Word API রেডি হলে ব্যাকগ্রাউন্ডে সেশন সিঙ্ক করবে
             checkLiveSession();
         });
+    } else {
+        checkLiveSession();
     }
 }
 
