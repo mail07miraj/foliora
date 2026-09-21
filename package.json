@@ -1,6 +1,6 @@
 {
   "name": "foliora-studio",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Microsoft Word add-in for Bangla publication, MCQ formatting, conversion, OCR, and document productivity.",
   "main": "app.js",
   "scripts": {
