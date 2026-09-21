@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0" xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="TaskPaneApp">
-  <Id>9b2d7f4e-2a1c-4c6e-9d7a-b5f3a8c9e420</Id><Version>1.2.0.0</Version><ProviderName>Foliora</ProviderName><DefaultLocale>en-US</DefaultLocale>
+  <Id>9b2d7f4e-2a1c-4c6e-9d7a-b5f3a8c9e420</Id><Version>1.2.1.0</Version><ProviderName>Foliora</ProviderName><DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="Foliora Studio"/><Description DefaultValue="A modern Microsoft Word add-in for Bangla publication workflows, including MCQ formatting, Bangla conversion, OCR, and document tools."/>
   <IconUrl DefaultValue="https://foliora-gamma.vercel.app/icon-32.png"/><HighResolutionIconUrl DefaultValue="https://foliora-gamma.vercel.app/icon-64.png"/>
   <SupportUrl DefaultValue="https://foliora-gamma.vercel.app/support.html"/><AppDomains><AppDomain>https://foliora-gamma.vercel.app</AppDomain></AppDomains>
