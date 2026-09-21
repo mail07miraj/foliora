@@ -20,7 +20,9 @@ const checks = [
   ["manifest has command icon 80", manifest.includes('id="icon80"')],
   ["manifest command references icon80", manifest.includes('size="80" resid="icon80"')],
   ["manifest has support URL", manifest.includes("<SupportUrl")],
-  ["manifest uses HTTPS source", manifest.includes("https://foliora-gamma.vercel.app/index.html")]
+  ["manifest uses HTTPS source", manifest.includes("https://foliora-gamma.vercel.app/index.html")],
+  ["mobile commerce guard present", app.includes("isMobileCommerceRestricted") && app.includes("applyMobileCommerceRestrictions")],
+  ["paid actions are marked for mobile policy", index.includes("data-paid-action")]
 ];
 
 let failed = false;
