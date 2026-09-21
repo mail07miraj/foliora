@@ -92,7 +92,7 @@
                 </div>
                 <h3 class="text-sm font-bold text-slate-800">Foliora MCQ Studio Locked</h3>
                 <p id="lockMcqReason" class="text-xs text-slate-500 mt-1 mb-4">আপনার অ্যাকাউন্টে বর্তমানে Foliora MCQ Studio-এর সক্রিয় লাইসেন্স নেই।</p>
-                <button onclick="handleLockAction('mcq')" class="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold py-2 px-4 rounded-lg text-xs shadow hover:from-blue-700 hover:to-indigo-700 transition">
+                <button data-paid-action onclick="handleLockAction('mcq')" class="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold py-2 px-4 rounded-lg text-xs shadow hover:from-blue-700 hover:to-indigo-700 transition">
                     <span id="lockMcqBtnText">Upgrade Plan</span>
                 </button>
             </div>
@@ -417,7 +417,7 @@
                 </div>
                 <h3 class="text-sm font-bold text-slate-800">Foliora OCR Studio Locked</h3>
                 <p id="lockOcrReason" class="text-xs text-slate-500 mt-1 mb-4">You have reached your monthly OCR limit or need an active entitlement.</p>
-                <button onclick="handleLockAction('ocr')" class="w-full bg-gradient-to-r from-teal-600 to-emerald-600 text-white font-semibold py-2 px-4 rounded-lg text-xs shadow hover:from-teal-700 hover:to-emerald-700 transition">
+                <button data-paid-action onclick="handleLockAction('ocr')" class="w-full bg-gradient-to-r from-teal-600 to-emerald-600 text-white font-semibold py-2 px-4 rounded-lg text-xs shadow hover:from-teal-700 hover:to-emerald-700 transition">
                     <span id="lockOcrBtnText">Upgrade OCR Quota</span>
                 </button>
             </div>
@@ -581,7 +581,7 @@
                 </div>
 
                 <div class="pt-2 flex flex-col gap-2">
-                    <button onclick="openPricingModal()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 rounded-lg transition text-xs shadow-sm flex items-center justify-center gap-1.5">
+                    <button data-paid-action onclick="openPricingModal()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 rounded-lg transition text-xs shadow-sm flex items-center justify-center gap-1.5">
                         <i class="fas fa-crown text-amber-300"></i> Upgrade / Manage Plan
                     </button>
                     <button onclick="handleLiveSignOut()" class="w-full bg-red-50 hover:bg-red-100 text-red-600 font-semibold py-2 rounded-lg transition text-xs border border-red-200 flex items-center justify-center gap-1.5">
@@ -657,7 +657,7 @@
                         <li><i class="fas fa-check text-indigo-600 mr-1.5"></i> ডুপ্লিকেট প্রশ্ন শনাক্তকরণ ও সল্যুশন</li>
                         <li><i class="fas fa-check text-indigo-600 mr-1.5"></i> অটোমেটিক মাল্টিপল সেট প্রশ্নপত্র তৈরি</li>
                     </ul>
-                    <button onclick="initiateCheckout('mcq_pro_monthly')" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 rounded-lg text-xs transition shadow-sm">
+                    <button data-paid-action onclick="initiateCheckout('mcq_pro_monthly')" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 rounded-lg text-xs transition shadow-sm">
                         Upgrade MCQ Studio
                     </button>
                 </div>
@@ -678,7 +678,7 @@
                         <li><i class="fas fa-check text-teal-600 mr-1.5"></i> প্রতি মাসে ৫০০ পেজ হাই-স্পিড AI OCR কোটা</li>
                         <li><i class="fas fa-check text-teal-600 mr-1.5"></i> জটিল যুক্তবর্ণ ও টেবিল নিখুঁত রিকভারি</li>
                     </ul>
-                    <button onclick="initiateCheckout('ocr_pro_monthly')" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-semibold py-2 rounded-lg text-xs transition shadow-sm">
+                    <button data-paid-action onclick="initiateCheckout('ocr_pro_monthly')" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-semibold py-2 rounded-lg text-xs transition shadow-sm">
                         Upgrade OCR Studio
                     </button>
                 </div>
