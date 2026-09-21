@@ -9,7 +9,7 @@
   <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
     <Description resid="residDescription"/><Requirements><bt:Sets DefaultMinVersion="1.1"><bt:Set Name="WordApi" MinVersion="1.1"/></bt:Sets></Requirements>
     <Hosts><Host xsi:type="Document"><DesktopFormFactor><ExtensionPoint xsi:type="PrimaryCommandSurface"><OfficeTab id="TabHome"><Group id="FolioraGroup">
-      <Label resid="residGroupLabel"/><Icon><bt:Image size="16" resid="icon16"/><bt:Image size="32" resid="icon32"/><bt:Image size="80" resid="icon64"/></Icon>
+      <Label resid="residGroupLabel"/><Icon><bt:Image size="16" resid="icon16"/><bt:Image size="32" resid="icon32"/><bt:Image size="80" resid="icon80"/></Icon>
       <Control xsi:type="Button" id="FolioraOpenButton"><Label resid="residButtonLabel"/><Supertip><Title resid="residButtonLabel"/><Description resid="residButtonTooltip"/></Supertip>
       <Icon><bt:Image size="16" resid="icon16"/><bt:Image size="32" resid="icon32"/><bt:Image size="80" resid="icon80"/></Icon><Action xsi:type="ShowTaskpane"><SourceLocation resid="residTaskpaneUrl"/></Action></Control>
     </Group></OfficeTab></ExtensionPoint></DesktopFormFactor></Host></Hosts>
