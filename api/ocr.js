@@ -129,7 +129,7 @@ Return valid JSON only using exactly:
 Use null when answer or explanation does not exist.`;
 
     const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${encodeURIComponent(geminiKey)}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${encodeURIComponent(geminiKey)}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
