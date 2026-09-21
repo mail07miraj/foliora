@@ -878,6 +878,50 @@ async function runSmartConverter(direction) {
     }
 }
 
+// --- ENGLISH FONT FIXER ---
+// Changes only Latin letters/numbers inside the current Word selection.
+// Bangla text and surrounding paragraph formatting are left untouched.
+async function fixEnglishFont() {
+    try {
+        const fontInput = document.getElementById("fix-font");
+        const targetFont = fontInput?.value?.trim() || "Times New Roman";
+
+        await Word.run(async (context) => {
+            const selection = context.document.getSelection();
+            selection.load("text");
+            await context.sync();
+
+            if (!selection.text || !selection.text.trim()) {
+                showStatus("Please select the text where you want to fix English fonts.", true);
+                return;
+            }
+
+            // Word wildcard search: [A-Za-z0-9]@ matches each contiguous
+            // English/Latin/numeric run without touching Bangla characters.
+            const matches = selection.search("[A-Za-z0-9]@", {
+                matchCase: false,
+                matchWildcards: true
+            });
+            matches.load("items/text");
+            await context.sync();
+
+            if (!matches.items.length) {
+                showStatus("No English letters or numbers were found in the selected text.", true);
+                return;
+            }
+
+            for (const match of matches.items) {
+                match.font.name = targetFont;
+            }
+
+            await context.sync();
+            showStatus(`English fonts fixed to ${targetFont}.`);
+        });
+    } catch (error) {
+        showStatus("English Font Fixer error: " + (error.message || "Unknown error"), true);
+    }
+}
+
 // --- BUTTON EVENT WIRING ---
 let _eventsBound = false;
 
