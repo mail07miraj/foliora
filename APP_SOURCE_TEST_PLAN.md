@@ -3,10 +3,14 @@
 ## Test account
 Create a dedicated reviewer account. Do not use a personal production account.
 
-- Email: TODO
-- Password: TODO
-- MCQ Studio entitlement: TODO
-- OCR quota: TODO
+Provisioning instructions: see **APP_SOURCE_REVIEWER_SETUP.md**.
+
+- Email: TODO — enter only in Partner Center/reviewer instructions, not GitHub
+- Password: TODO — enter only in Partner Center/reviewer instructions, not GitHub
+- MCQ Studio entitlement: **Pro**
+- OCR entitlement: **Free**
+- OCR quota: **10 pages/month**
+- Converter: **Free Lifetime**
 
 ## 1. Open the add-in
 1. Install/sideload the current manifest.
@@ -21,13 +25,16 @@ Create a dedicated reviewer account. Do not use a personal production account.
 
 ## 3. MCQ Studio
 1. Sign in with the reviewer account.
-2. Test normal MCQ formatting and Smart MCQ formatting.
+2. Open **My Foliora → Sync** and confirm **MCQ Studio: Pro Active**.
+3. Confirm the locked MCQ card is replaced by the functional MCQ Studio UI.
+4. Test normal MCQ formatting and Smart MCQ formatting.
 3. Add questions to the question bank.
 4. Run duplicate detection.
 5. Generate a question set and insert it into Word.
 
 ## 4. OCR Studio
-1. Open OCR Studio.
+1. Confirm **OCR Studio: Free** and **10 pgs/mo (Trial)** in My Foliora.
+2. Open OCR Studio.
 2. Upload the supplied sample image.
 3. Start extraction.
 4. Confirm it works without a Gemini API key.
