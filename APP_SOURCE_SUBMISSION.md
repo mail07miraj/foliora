@@ -1,6 +1,6 @@
 # Foliora Studio — Phase B-4 AppSource Submission Pack
 
-Updated: September 21, 2026
+Updated: September 22, 2026
 
 ## Offer identity
 - Product name: **Foliora Studio**
@@ -47,7 +47,7 @@ A focused workspace for Bangla publication workflows, including MCQ formatting, 
 
 ## Listing media
 - Required screenshot: at least 1 PNG.
-- Prepare screenshots at **1366 × 768 px**, with readable UI and no personal information.
+- Prepare screenshots in a Partner Center-supported PNG size/aspect ratio with readable UI and no personal information. The current five screenshots were captured from the working Word add-in and should be normalized to the exact dimensions accepted by the Partner Center submission form rather than assuming a universal 1366 × 768 requirement.
 - Recommended set: MCQ Studio, Bangla Converter, OCR Studio, Question Bank/Generator, account/workspace.
 - Manifest task-pane icon: 32 × 32 PNG.
 - Manifest high-resolution icon: 64 × 64 PNG.
@@ -80,11 +80,14 @@ The add-in uses Supabase for authentication and entitlement/quota state, Google 
 - Live URL/browser verification from this environment: still unverified.
 
 ## Remaining blockers
-1. Open the four legal URLs and production index in a normal browser and confirm no 404/certificate/deployment mismatch.
-2. Confirm Partner Center publisher identity matches **Foliora**.
-3. Create a dedicated reviewer account with working MCQ/OCR entitlements.
-4. Verify the external paid checkout and entitlement synchronization end-to-end.
-5. Test Word on Windows, Word on the web, and Word on Mac before submission.
+1. **Replace the current paid checkout URL.** The add-in currently opens `https://foliora.com/checkout`, but no production Foliora payment provider/checkout destination has been established for this project. Do not submit until a real production checkout is configured.
+2. Verify payment completion/webhook -> Supabase entitlement synchronization -> add-in refresh end-to-end.
+3. Open the four legal URLs and production index in a normal browser and confirm no 404/certificate/deployment mismatch.
+4. Confirm Partner Center publisher identity matches **Foliora**.
+5. Create a dedicated reviewer account with working MCQ/OCR entitlements.
+6. Test Word on Windows, Word on the web, and Word on Mac before submission.
+
+See `APP_SOURCE_AUDIT.md` for the Phase B-5 audit and submission gate.
 
 ## Microsoft references
 - https://learn.microsoft.com/en-us/office/dev/add-ins/develop/add-in-manifests
