@@ -4,8 +4,9 @@
   "description": "Microsoft Word add-in for Bangla publication, MCQ formatting, conversion, OCR, and document productivity.",
   "main": "app.js",
   "scripts": {
-    "test": "node --check app.js && node --check api/ocr.js"
+    "test": "node --check app.js && node --check api/ocr.js && node scripts/smoke-test.js"
   },
   "private": true,
+  "engines": { "node": ">=20" },
   "type": "commonjs"
 }
