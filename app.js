@@ -336,7 +336,29 @@ function closeProfileModal() {
 }
 
 // --- PRICING MODAL & CHECKOUT ---
+function isMobileCommerceRestricted() {
+    try {
+        const platform = Office?.context?.platform;
+        return platform === "iOS" || platform === "Android";
+    } catch (e) {
+        return false;
+    }
+}
+
+function applyMobileCommerceRestrictions() {
+    if (!isMobileCommerceRestricted()) return;
+
+    // Microsoft Marketplace mobile policy: don't expose purchase/up-sell UI on mobile.
+    document.querySelectorAll('[data-paid-action]').forEach(el => { el.style.display = 'none'; });
+    const mobileNote = document.getElementById('mobilePlanNote');
+    if (mobileNote) mobileNote.classList.remove('hidden');
+}
+
 function openPricingModal() {
+    if (isMobileCommerceRestricted()) {
+        showStatus("Plan management is available on desktop Word or Word on the web.");
+        return;
+    }
     closeProfileModal();
     document.getElementById('modalPricing').classList.remove('hidden');
 }
@@ -346,6 +368,10 @@ function closePricingModal() {
 }
 
 function handleLockAction(productId) {
+    if (isMobileCommerceRestricted()) {
+        showStatus("Plan management is available on desktop Word or Word on the web.");
+        return;
+    }
     if (!FOLIORA_STATE.user || !FOLIORA_STATE.user.isLoggedIn) {
         openAuthModal('signin');
     } else {
@@ -354,6 +380,10 @@ function handleLockAction(productId) {
 }
 
 async function initiateCheckout(planId) {
+    if (isMobileCommerceRestricted()) {
+        showStatus("Plan management is available on desktop Word or Word on the web.");
+        return;
+    }
     if (!FOLIORA_STATE.user || !FOLIORA_STATE.user.isLoggedIn) {
         closePricingModal();
         openAuthModal('signin');
@@ -921,6 +951,7 @@ function bindAppEvents() {
 
     switchProduct('mcq');
     updateBankCount();
+    applyMobileCommerceRestrictions();
 
 }
 
