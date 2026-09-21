@@ -1,0 +1,29 @@
+name: Foliora Phase B Validation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install manifest validator
+        run: npm install --no-save office-addin-manifest
+
+      - name: Syntax and smoke tests
+        run: npm test
+
+      - name: Production manifest validation
+        run: npx office-addin-manifest validate -p manifest.xml
