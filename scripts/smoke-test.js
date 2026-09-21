@@ -10,6 +10,7 @@ const checks = [
   ["client direct Gemini endpoint removed", !app.includes("generativelanguage.googleapis.com")],
   ["secure OCR endpoint wired", app.includes('fetch("/api/ocr"')],
   ["server Gemini endpoint present", ocr.includes("generativelanguage.googleapis.com")],
+  ["OCR uses supported Gemini 3.5 Flash-Lite model", ocr.includes("gemini-3.5-flash-lite:generateContent")],
   ["server Gemini secret is environment-only", ocr.includes("process.env.GEMINI_API_KEY")],
   ["OCR endpoint authenticates bearer token", ocr.includes("Authorization") && ocr.includes("Bearer ")],
   ["OCR endpoint enforces image size", ocr.includes("MAX_IMAGE_BYTES")],
