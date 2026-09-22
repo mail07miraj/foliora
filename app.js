@@ -632,12 +632,13 @@ function mcqCaptureAnswerFormat(rawAnswerLine, answerContent, markerMatch) {
     if (!marker) return null;
 
     const markerIndexInContent = markerMatch.index ?? content.indexOf(marker);
-    const prefixPart = markerIndexInContent >= 0 ? content.slice(0, markerIndexInContent).trimEnd() : "";
+    const contentStart = raw.indexOf(content);
+    const linePrefix = contentStart >= 0 ? raw.slice(0, contentStart).trimEnd() : "";
     const suffixPart = markerIndexInContent >= 0 ? content.slice(markerIndexInContent + marker.length).trimStart() : "";
 
     return {
         rawLine: raw,
-        prefix: prefixPart,
+        prefix: linePrefix,
         marker: marker,
         suffix: suffixPart,
         markerBefore: markerMatch[0].slice(0, markerMatch[0].indexOf(marker)),
