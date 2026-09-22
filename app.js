@@ -623,6 +623,54 @@ function getStandardAnswerMarker(answer, isUnicode) {
     const map = { "ক": "K", "খ": "L", "গ": "M", "ঘ": "N" };
     return `DËi: ${map[norm] || norm}`;
 }
+function mcqCaptureAnswerFormat(rawAnswerLine, answerContent, markerMatch) {
+    const raw = String(rawAnswerLine || "").trim();
+    const content = String(answerContent || "").trim();
+    if (!raw || !content || !markerMatch) return null;
+
+    const marker = String(markerMatch[1] || "").trim();
+    if (!marker) return null;
+
+    const markerIndexInContent = markerMatch.index ?? content.indexOf(marker);
+    const prefixPart = markerIndexInContent >= 0 ? content.slice(0, markerIndexInContent).trimEnd() : "";
+    const suffixPart = markerIndexInContent >= 0 ? content.slice(markerIndexInContent + marker.length).trimStart() : "";
+
+    return {
+        rawLine: raw,
+        prefix: prefixPart,
+        marker: marker,
+        suffix: suffixPart,
+        markerBefore: markerMatch[0].slice(0, markerMatch[0].indexOf(marker)),
+        markerAfter: markerMatch[0].slice(markerMatch[0].indexOf(marker) + marker.length)
+    };
+}
+
+function mcqBuildPreservedAnswerText(question, answer) {
+    const format = question && question.answerFormat;
+    const normalizedAnswer = normalizeAnswerLabel(answer);
+    if (!format || !normalizedAnswer) return "";
+
+    const originalMarker = String(format.marker || "");
+    let outputMarker = originalMarker;
+    const upper = originalMarker.toUpperCase();
+
+    if (["A","B","C","D"].includes(upper)) {
+        outputMarker = {"ক":"A","খ":"B","গ":"C","ঘ":"D"}[normalizedAnswer];
+    } else if (["K","L","M","N"].includes(upper)) {
+        outputMarker = {"ক":"K","খ":"L","গ":"M","ঘ":"N"}[normalizedAnswer];
+    } else if (["P","Q","R","S"].includes(upper)) {
+        outputMarker = {"ক":"P","খ":"Q","গ":"R","ঘ":"S"}[normalizedAnswer];
+    } else {
+        outputMarker = normalizedAnswer;
+    }
+
+    return (format.prefix || "") +
+        (format.markerBefore || "") +
+        outputMarker +
+        (format.markerAfter || "") +
+        (format.suffix ? " " + format.suffix : "");
+}
+
 
 // --- PROVEN ROBUST BIJOY <-> UNICODE CONVERTER ENGINE ---
 function convertUnicodeToBijoy(text) {
@@ -990,12 +1038,14 @@ function parseQuestions(text) {
         let expMatch = line.match(/^\s*(?:ব্যাখ্যা|Explanation|e¨vL¨v)\s*[: \-\u2013\u2014]\s*(.+)$/i);
         if (expMatch && current) { current.explanation = expMatch[1].trim(); continue; }
 
-        let ansMatch = line.match(/^\s*(?:সঠিক উত্তর|উত্তর|উ|Ans|Answer|mwVK DËi|DËi)\s*[:\. ]?\s*(.*)$/i);
+        let ansMatch = line.match(/^\s*(?:সঠিক উত্তর|উত্তর|উ|Ans|Answer|mwVK DËi|DËi|D)\s*[:：\.]?\s*(.*)$/i);
         if (ansMatch && current) {
-            let ansExtr = ansMatch[1].match(/[\(\[]?([ক-ঘA-DK-NP-Sa-dk-np-s])[\)\]]?/);
+            const ansContent = ansMatch[1] || "";
+            const ansExtr = ansContent.match(/[\(\[\{]?\s*([ক-ঘA-DK-NP-Sa-dk-np-s])\s*[\)\]\}]?/);
             if (ansExtr) {
                 current.answer = normalizeAnswerLabel(ansExtr[1]);
                 current.original_answer = current.answer;
+                current.answerFormat = mcqCaptureAnswerFormat(line, ansContent, ansExtr);
             }
             continue;
         }
@@ -1207,8 +1257,8 @@ function mcqInsertOption(paragraph, option, optionFont, optionSize, targetFont, 
     const label = useSymbols ? (OPTION_EXPORT_MAP[labelText] || labelText) : getStandardOptionMarker(labelText, isUnicode);
     
     let text = String(option[1] || "").replace(/[\r\n\v]/g, " ").trim();
-    const match = text.match(/\s+([PQRS])\s*$/i);
-    if (match) text = text.replace(/\s+([PQRS])\s*$/i, "").trim();
+    const match = text.match(/\s+([PQRSK-N])\s*$/i);
+    if (match) text = text.replace(/\s+([PQRSK-N])\s*$/i, "").trim();
     
     if (leadingTab) {
         let tabRange = paragraph.insertText("\t", "End");
@@ -1237,14 +1287,26 @@ function mcqResolveAnswer(question) {
     return "";
 }
 
-function mcqInsertNormalAnswer(paragraph, answer, answerSize, origItalic, useSymbols, targetFont, targetSize, isUnicode) {
+function mcqInsertNormalAnswer(paragraph, question, answer, answerSize, origItalic, useSymbols, targetFont, targetSize, isUnicode) {
     const normalizedAnswer = normalizeAnswerLabel(answer);
     if (!normalizedAnswer) return;
-    const marker = useSymbols ? (ANSWER_EXPORT_MAP[normalizedAnswer] || normalizedAnswer) : getStandardAnswerMarker(normalizedAnswer, isUnicode);
+
+    let marker = "";
+    let answerFont = targetFont;
+    let answerSizeToUse = targetSize;
+
+    if (useSymbols) {
+        marker = ANSWER_EXPORT_MAP[normalizedAnswer] || normalizedAnswer;
+        answerFont = "ProshnaP";
+        answerSizeToUse = answerSize;
+    } else {
+        marker = mcqBuildPreservedAnswerText(question, normalizedAnswer) || getStandardAnswerMarker(normalizedAnswer, isUnicode);
+    }
+
     const tabRange = paragraph.insertText("\t", "End");
     mcqApplyFontSafe(tabRange, targetFont, targetSize, false, false);
     const answerRange = paragraph.insertText(marker, "End");
-    mcqApplyFontSafe(answerRange, useSymbols ? "ProshnaP" : targetFont, useSymbols ? answerSize : targetSize, false, origItalic);
+    mcqApplyFontSafe(answerRange, answerFont, answerSizeToUse, false, origItalic);
 }
 
 function mcqInsertNormalOptions(anchorRange, question, layout, optionFont, optionSize, targetFont, targetSize, origAlign, origBold, origItalic, answerSize, useSymbols, isUnicode) {
@@ -1261,7 +1323,7 @@ function mcqInsertNormalOptions(anchorRange, question, layout, optionFont, optio
                 mcqInsertOption(paragraph, question.options[j + 1], optionFont, optionSize, targetFont, targetSize, origBold, origItalic, false, useSymbols, isUnicode);
             }
             if (j + 1 >= 3 || j + 1 === count - 1) {
-                if (j + 1 === 3) mcqInsertNormalAnswer(paragraph, mcqResolveAnswer(question), answerSize, origItalic, useSymbols, targetFont, targetSize, isUnicode);
+                if (j + 1 === 3) mcqInsertNormalAnswer(paragraph, question, mcqResolveAnswer(question), answerSize, origItalic, useSymbols, targetFont, targetSize, isUnicode);
             }
         }
     } else {
@@ -1270,7 +1332,7 @@ function mcqInsertNormalOptions(anchorRange, question, layout, optionFont, optio
             paragraph.alignment = origAlign;
             
             mcqInsertOption(paragraph, question.options[j], optionFont, optionSize, targetFont, targetSize, origBold, origItalic, true, useSymbols, isUnicode);
-            if (j === 3) mcqInsertNormalAnswer(paragraph, question.answer, answerSize, origItalic, useSymbols, targetFont, targetSize, isUnicode);
+            if (j === 3) mcqInsertNormalAnswer(paragraph, question, mcqResolveAnswer(question), answerSize, origItalic, useSymbols, targetFont, targetSize, isUnicode);
         }
     }
 }
@@ -1919,7 +1981,7 @@ function mcqInsertSetOptionsWithAnswer(anchorRange, question, layout, optionFont
         const label = useSymbols ? (OPTION_EXPORT_MAP[labelText] || labelText) : getStandardOptionMarker(labelText, isUnicode);
         
         let text = String(option[1] || "").replace(/[\r\n\v]/g, " ").trim();
-        text = text.replace(/\s+([PQRS])\s*$/i, "").trim();
+        text = text.replace(/\s+([PQRSK-N])\s*$/i, "").trim();
 
         if (leadingTab) {
             const r = paragraph.insertText("\t", "End");
