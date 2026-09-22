@@ -631,18 +631,20 @@ function mcqCaptureAnswerFormat(rawAnswerLine, answerContent, markerMatch) {
     const marker = String(markerMatch[1] || "").trim();
     if (!marker) return null;
 
-    const markerIndexInContent = markerMatch.index ?? content.indexOf(marker);
     const contentStart = raw.indexOf(content);
-    const linePrefix = contentStart >= 0 ? raw.slice(0, contentStart).trimEnd() : "";
-    const suffixPart = markerIndexInContent >= 0 ? content.slice(markerIndexInContent + marker.length).trimStart() : "";
+    const markerIndexInContent = markerMatch.index ?? content.indexOf(marker);
+    const markerOffsetInMatch = markerMatch[0].indexOf(marker);
+    const markerStart = contentStart >= 0 && markerIndexInContent >= 0
+        ? contentStart + markerIndexInContent + Math.max(0, markerOffsetInMatch)
+        : raw.indexOf(marker);
+
+    if (markerStart < 0) return null;
 
     return {
         rawLine: raw,
-        prefix: linePrefix,
+        prefix: raw.slice(0, markerStart),
         marker: marker,
-        suffix: suffixPart,
-        markerBefore: markerMatch[0].slice(0, markerMatch[0].indexOf(marker)),
-        markerAfter: markerMatch[0].slice(markerMatch[0].indexOf(marker) + marker.length)
+        suffix: raw.slice(markerStart + marker.length)
     };
 }
 
@@ -652,8 +654,8 @@ function mcqBuildPreservedAnswerText(question, answer) {
     if (!format || !normalizedAnswer) return "";
 
     const originalMarker = String(format.marker || "");
-    let outputMarker = originalMarker;
     const upper = originalMarker.toUpperCase();
+    let outputMarker = normalizedAnswer;
 
     if (["A","B","C","D"].includes(upper)) {
         outputMarker = {"ক":"A","খ":"B","গ":"C","ঘ":"D"}[normalizedAnswer];
@@ -661,15 +663,9 @@ function mcqBuildPreservedAnswerText(question, answer) {
         outputMarker = {"ক":"K","খ":"L","গ":"M","ঘ":"N"}[normalizedAnswer];
     } else if (["P","Q","R","S"].includes(upper)) {
         outputMarker = {"ক":"P","খ":"Q","গ":"R","ঘ":"S"}[normalizedAnswer];
-    } else {
-        outputMarker = normalizedAnswer;
     }
 
-    return (format.prefix || "") +
-        (format.markerBefore || "") +
-        outputMarker +
-        (format.markerAfter || "") +
-        (format.suffix ? " " + format.suffix : "");
+    return (format.prefix || "") + outputMarker + (format.suffix || "");
 }
 
 
