@@ -922,6 +922,1283 @@ async function fixEnglishFont() {
     }
 }
 
+// --- MCQ FORMATTING CORE ENGINES ---
+function sanitizeQuestionAnswers(q) {
+    if (!q || !q.options) return;
+    for (let j = 0; j < q.options.length; j++) {
+        let text = q.options[j][1];
+        if (typeof text === "string") {
+            const match = text.match(/\s+([PQRS])\s*$/i);
+            if (match) {
+                q.options[j][1] = text.replace(/\s+([PQRS])\s*$/i, "").trim();
+                if (!q.answer) {
+                    const map = { "P": "ক", "Q": "খ", "R": "গ", "S": "ঘ" };
+                    q.answer = map[match[1].toUpperCase()];
+                    q.original_answer = q.answer;
+                }
+            }
+        }
+    }
+}
+
+function parseQuestions(text) {
+    let cleanText = String(text || "").replace(/([\r\n\v]+)/g, "\n");
+    let lines = cleanText.split('\n');
+    let questions = [];
+    let current = null;
+
+    function flush() {
+        if (current && current.question && current.options.length > 0) {
+            sanitizeQuestionAnswers(current);
+            questions.push(current);
+        }
+        current = null;
+    }
+
+    for (let i = 0; i < lines.length; i++) {
+        let line = lines[i].trim();
+        if (!line) continue;
+
+        let expMatch = line.match(/^\s*(?:ব্যাখ্যা|Explanation|e¨vL¨v)\s*[: \-\u2013\u2014]\s*(.+)$/i);
+        if (expMatch && current) { current.explanation = expMatch[1].trim(); continue; }
+
+        let ansMatch = line.match(/^\s*(?:সঠিক উত্তর|উত্তর|উ|Ans|Answer|mwVK DËi|DËi)\s*[:\. ]?\s*(.*)$/i);
+        if (ansMatch && current) {
+            let ansExtr = ansMatch[1].match(/[\(\[]?([ক-ঘA-DK-Na-dk-n])[\)\]]?/);
+            if (ansExtr) {
+                current.answer = normalizeAnswerLabel(ansExtr[1]);
+                current.original_answer = current.answer;
+            }
+            continue;
+        }
+
+        let qMatch = line.match(/^\s*((?:\d+|[০-৯]+))\s*[\. \)\]]\s*(.*)$/);
+        if (qMatch || /^[^\(]+?\?$/.test(line)) {
+            flush();
+            let rawQ = qMatch ? qMatch[2] : line;
+            let optPattern = /([ক-ঘK-N])[\.\) :]\s*(.+?)(?=\s+[ক-ঘK-N][\.\) :]|$)/g;
+            let optionsFound = [];
+            let questionText = rawQ;
+            
+            let firstOptIndex = rawQ.search(/(?:\s+|^)([ক-ঘK-N])[\.\) :]/);
+            if(firstOptIndex !== -1) {
+                questionText = rawQ.substring(0, firstOptIndex).trim();
+                let optionsPart = rawQ.substring(firstOptIndex).trim();
+                let match;
+                while ((match = optPattern.exec(optionsPart)) !== null) {
+                    optionsFound.push([normalizeAnswerLabel(match[1]), match[2].trim()]);
+                }
+            }
+
+            current = {
+                question: questionText,
+                questionNumber: qMatch ? qMatch[1] : null,
+                _sourceLineIndex: i,
+                options: optionsFound,
+                answer: null,
+                explanation: null,
+                original_answer: null
+            };
+            continue;
+        }
+
+        if (!current) continue;
+        let optPattern = /([ক-ঘK-N])[\.\) :]\s*(.+?)(?=\s+[ক-ঘK-N][\.\) :]|$)/g;
+        let match;
+        let foundInline = false;
+        while ((match = optPattern.exec(line)) !== null) {
+            current.options.push([normalizeAnswerLabel(match[1]), match[2].trim()]);
+            foundInline = true;
+        }
+        if (foundInline) continue;
+
+        let singleOptMatch = line.match(/^\s*\(?([ক-ঘA-DKLMNa-dklmn])\)?[. :]?\s*(.+?)$/);
+        if (singleOptMatch) {
+            current.options.push([normalizeAnswerLabel(singleOptMatch[1]), singleOptMatch[2].trim()]);
+            continue;
+        }
+        if (current.options.length > 0) {
+            current.options[current.options.length - 1][1] += " " + line;
+        } else {
+            current.question += " " + line;
+        }
+    }
+    flush();
+    return questions;
+}
+
+function shuffleOptions(question) {
+    if (!question.options || question.options.length < 2 || !question.answer) return question;
+    
+    let originalAns = question.original_answer || question.answer;
+    let correctText = null;
+    
+    for (let i = 0; i < question.options.length; i++) {
+        if (question.options[i][0] === originalAns) { correctText = question.options[i][1]; break; }
+    }
+    if (!correctText) return question;
+
+    let shuffled = question.options.slice();
+    for (let i = shuffled.length - 1; i > 0; i--) {
+        let j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+
+    let newOptions = [];
+    let newAnswer = null;
+    for (let i = 0; i < shuffled.length; i++) {
+        let newLabel = OPTION_ORDER[i] || shuffled[i][0];
+        newOptions.push([newLabel, shuffled[i][1]]);
+        if (shuffled[i][1] === correctText) { newAnswer = newLabel; }
+    }
+    
+    question.options = newOptions;
+    question.answer = newAnswer;
+    return question;
+}
+
+function mcqReadTabStopsFromOOXML(ooxml) {
+    const result = [];
+    if (!ooxml) return result;
+    const tabsBlockMatch = ooxml.match(/<w:tabs\b[^>]*>([\s\S]*?)<\/w:tabs>/i);
+    if (!tabsBlockMatch) return result;
+    const tabRegex = /<w:tab\b([^>]*?)(?:\/>|>[\s\S]*?<\/w:tab>)/gi;
+    let match;
+    while ((match = tabRegex.exec(tabsBlockMatch[1])) !== null) {
+        const attrs = match[1] || "";
+        const posMatch = attrs.match(/w:pos="([\d.]+)"/i);
+        if (!posMatch) continue;
+        const valMatch = attrs.match(/w:val="([^"]+)"/i);
+        result.push({ position: parseFloat(posMatch[1]) / 20, alignment: valMatch ? valMatch[1] : "left" });
+    }
+    return result.sort((a, b) => a.position - b.position);
+}
+
+async function mcqReadSelectedParagraphTabStops(context, paragraph) {
+    try {
+        if (!Office.context.requirements.isSetSupported("WordApi", "1.1")) return [];
+        const ooxml = paragraph.getOoxml();
+        await context.sync();
+        return mcqReadTabStopsFromOOXML(ooxml.value || "");
+    } catch (error) { return []; }
+}
+
+async function mcqGetCurrentColumnWidth(context) {
+    try {
+        if (!Office.context.requirements.isSetSupported("WordApi", "1.3")) return 350;
+        const sections = context.document.getSelection().sections;
+        sections.load("items");
+        await context.sync();
+        if (!sections.items.length) return 350;
+        
+        const pageSetup = sections.items[0].pageSetup;
+        pageSetup.load("pageWidth,leftMargin,rightMargin,gutter");
+        const columns = pageSetup.textColumns;
+        columns.load("items");
+        await context.sync();
+
+        if (columns.items.length > 0 && typeof columns.items[0].width === "number") {
+            return columns.items[0].width;
+        }
+        const width = pageSetup.pageWidth - pageSetup.leftMargin - pageSetup.rightMargin - (pageSetup.gutter || 0);
+        return width > 0 ? width : 350;
+    } catch (error) { 
+        return 350; 
+    }
+}
+
+function mcqGetOptionSlots(tabStops, columnWidth) {
+    if (!Array.isArray(tabStops) || tabStops.length < 2) return null;
+    const sorted = tabStops.filter(t => Number.isFinite(Number(t.position))).slice().sort((a, b) => a.position - b.position);
+    if (sorted.length < 2) return null;
+
+    const firstTab = sorted[0].position;
+    const secondTab = sorted[1].position;
+    if (secondTab <= firstTab) return null;
+
+    const firstSlot = secondTab - firstTab;
+    let secondSlot = null;
+
+    if (sorted.length >= 3 && sorted[2].position > secondTab) {
+        secondSlot = sorted[2].position - secondTab;
+    } else if (Number.isFinite(columnWidth) && columnWidth > secondTab) {
+        secondSlot = columnWidth - secondTab;
+    }
+
+    if (firstSlot <= 0 || !secondSlot || secondSlot <= 0) return null;
+    return { firstSlot, secondSlot };
+}
+
+function mcqMeasureTextPoints(text, fontName, fontSize, bold = false) {
+    text = String(text || "");
+    if (!text) return 0;
+    let size = parseFloat(fontSize) || 10.5;
+    const canvas = mcqMeasureTextPoints.canvas || (mcqMeasureTextPoints.canvas = document.createElement("canvas"));
+    const ctx = canvas.getContext("2d");
+    ctx.font = `${bold ? "700 " : "400 "}${size * (96 / 72)}px "${String(fontName || "Arial").replace(/["']/g, "")}"`;
+    return ctx.measureText(text).width * (72 / 96);
+}
+
+function mcqMeasureOptionWidth(option, optionFont, optionSize, textFont, textSize, bold, useSymbols, isUnicode) {
+    const labelText = option[0] || "";
+    const marker = useSymbols ? (OPTION_EXPORT_MAP[labelText] || labelText) : getStandardOptionMarker(labelText, isUnicode);
+    const markerFont = useSymbols ? optionFont : textFont;
+    const markerSize = useSymbols ? optionSize : textSize;
+    const text = String(option[1] || "").replace(/[\r\n\v]/g, " ").trim();
+    return mcqMeasureTextPoints(marker, markerFont, markerSize, bold) + mcqMeasureTextPoints(` ${text}`, textFont, textSize, bold) + 2;
+}
+
+function mcqOptionFitsSlot(option, slotWidth, optionFont, optionSize, targetFont, targetSize, bold, useSymbols, isUnicode) {
+    if (!option || !Number.isFinite(slotWidth) || slotWidth <= 0) return false;
+    return (mcqMeasureOptionWidth(option, optionFont, optionSize, targetFont, targetSize, bold, useSymbols, isUnicode) * 1.08) <= slotWidth;
+}
+
+function mcqDetectAutoOptionLayout(options, tabStops, columnWidth, optionFont, optionSize, targetFont, targetSize, bold, useSymbols, isUnicode) {
+    if (!options || options.length < 4) return { mode: "one-per-line" };
+    const slots = mcqGetOptionSlots(tabStops, columnWidth);
+    if (!slots) return { mode: "one-per-line" };
+    
+    const allFit = 
+        mcqOptionFitsSlot(options[0], slots.firstSlot, optionFont, optionSize, targetFont, targetSize, bold, useSymbols, isUnicode) &&
+        mcqOptionFitsSlot(options[1], slots.secondSlot, optionFont, optionSize, targetFont, targetSize, bold, useSymbols, isUnicode) &&
+        mcqOptionFitsSlot(options[2], slots.firstSlot, optionFont, optionSize, targetFont, targetSize, bold, useSymbols, isUnicode) &&
+        mcqOptionFitsSlot(options[3], slots.secondSlot, optionFont, optionSize, targetFont, targetSize, bold, useSymbols, isUnicode);
+    return { mode: allFit ? "two-per-line" : "one-per-line" };
+}
+
+function mcqApplyFontSafe(range, fontName, fontSize, bold, italic) {
+    if (fontName) range.font.name = fontName;
+    if (fontSize) range.font.size = fontSize;
+    range.font.bold = bold === true;
+    range.font.italic = italic === true;
+}
+
+function mcqInsertOption(paragraph, option, optionFont, optionSize, targetFont, targetSize, origBold, origItalic, leadingTab, useSymbols, isUnicode) {
+    if (!option) return;
+    const labelText = option[0] || "";
+    const label = useSymbols ? (OPTION_EXPORT_MAP[labelText] || labelText) : getStandardOptionMarker(labelText, isUnicode);
+    
+    let text = String(option[1] || "").replace(/[\r\n\v]/g, " ").trim();
+    const match = text.match(/\s+([PQRS])\s*$/i);
+    if (match) text = text.replace(/\s+([PQRS])\s*$/i, "").trim();
+    
+    if (leadingTab) {
+        let tabRange = paragraph.insertText("\t", "End");
+        mcqApplyFontSafe(tabRange, targetFont, targetSize, false, false);
+    }
+    
+    const markerRange = paragraph.insertText(label, "End");
+    mcqApplyFontSafe(markerRange, useSymbols ? optionFont : targetFont, useSymbols ? optionSize : targetSize, origBold, origItalic);
+    
+    const textRange = paragraph.insertText(` ${text}`, "End");
+    mcqApplyFontSafe(textRange, targetFont, targetSize, origBold, origItalic);
+}
+
+function mcqInsertNormalAnswer(paragraph, answer, answerSize, origItalic, useSymbols, targetFont, targetSize, isUnicode) {
+    if (!answer) return;
+    const marker = useSymbols ? (ANSWER_EXPORT_MAP[answer] || answer) : getStandardAnswerMarker(answer, isUnicode);
+    paragraph.insertText("\t", "End");
+    const answerRange = paragraph.insertText(marker, "End");
+    mcqApplyFontSafe(answerRange, useSymbols ? "ProshnaP" : targetFont, useSymbols ? answerSize : targetSize, false, origItalic);
+}
+
+function mcqInsertNormalOptions(anchorRange, question, layout, optionFont, optionSize, targetFont, targetSize, origAlign, origBold, origItalic, answerSize, useSymbols, isUnicode) {
+    const count = Math.min(4, question.options.length);
+    if (layout.mode === "two-per-line") {
+        for (let j = 0; j < count; j += 2) {
+            const paragraph = anchorRange.insertParagraph("", "Before");
+            paragraph.alignment = origAlign;
+            
+            mcqInsertOption(paragraph, question.options[j], optionFont, optionSize, targetFont, targetSize, origBold, origItalic, true, useSymbols, isUnicode);
+            if (question.options[j + 1]) {
+                let midTab = paragraph.insertText("\t", "End");
+                mcqApplyFontSafe(midTab, targetFont, targetSize, false, false);
+                mcqInsertOption(paragraph, question.options[j + 1], optionFont, optionSize, targetFont, targetSize, origBold, origItalic, false, useSymbols, isUnicode);
+            }
+            if (j + 1 >= 3 || j + 1 === count - 1) {
+                if (j + 1 === 3) mcqInsertNormalAnswer(paragraph, question.answer, answerSize, origItalic, useSymbols, targetFont, targetSize, isUnicode);
+            }
+        }
+    } else {
+        for (let j = 0; j < count; j++) {
+            const paragraph = anchorRange.insertParagraph("", "Before");
+            paragraph.alignment = origAlign;
+            
+            mcqInsertOption(paragraph, question.options[j], optionFont, optionSize, targetFont, targetSize, origBold, origItalic, true, useSymbols, isUnicode);
+            if (j === 3) mcqInsertNormalAnswer(paragraph, question.answer, answerSize, origItalic, useSymbols, targetFont, targetSize, isUnicode);
+        }
+    }
+}
+
+function mcqInsertSmartOptions(anchorRange, question, layout, optionFont, optionSize, targetFont, targetSize, origAlign, origBold, origItalic, useSymbols, isUnicode) {
+    const count = Math.min(4, question.options.length);
+    if (layout.mode === "two-per-line") {
+        for (let j = 0; j < count; j += 2) {
+            const paragraph = anchorRange.insertParagraph("", "Before");
+            paragraph.alignment = origAlign;
+            
+            mcqInsertOption(paragraph, question.options[j], optionFont, optionSize, targetFont, targetSize, origBold, origItalic, true, useSymbols, isUnicode);
+            if (question.options[j + 1]) {
+                let midTab = paragraph.insertText("\t", "End");
+                mcqApplyFontSafe(midTab, targetFont, targetSize, false, false);
+                mcqInsertOption(paragraph, question.options[j + 1], optionFont, optionSize, targetFont, targetSize, origBold, origItalic, false, useSymbols, isUnicode);
+            }
+        }
+    } else {
+        for (let j = 0; j < count; j++) {
+            const paragraph = anchorRange.insertParagraph("", "Before");
+            paragraph.alignment = origAlign;
+            mcqInsertOption(paragraph, question.options[j], optionFont, optionSize, targetFont, targetSize, origBold, origItalic, true, useSymbols, isUnicode);
+        }
+    }
+}
+
+function mcqInsertNormalExplanation(anchorRange, explanation, isUnicode, targetFont, origSize, origAlign, origBold, origItalic) {
+    if (!explanation) return;
+    const label = isUnicode ? "ব্যাখ্যা: " : "e¨vL¨v: ";
+    const safe = String(explanation).replace(/[\r\n\v]/g, " ").trim();
+    const paragraph = anchorRange.insertParagraph(`${label}${safe}`, "Before");
+    mcqApplyFontSafe(paragraph, targetFont, origSize, origBold, origItalic);
+    paragraph.alignment = origAlign;
+}
+
+function mcqInsertSmartAnswerPage(anchorRange, questions, isUnicode, targetFont, origSize, origAlign, origBold, origItalic, answerSize, useSymbols) {
+    anchorRange.insertBreak("Page", "Before");
+    const header = isUnicode ? "সঠিক উত্তর ও ব্যাখ্যা" : "mwVK DËi I e¨vL¨v";
+    const headerPara = anchorRange.insertParagraph(header, "Before");
+    mcqApplyFontSafe(headerPara, targetFont, 12, true, false);
+    headerPara.alignment = "Centered";
+    
+    for (let i = 0; i < questions.length; i++) {
+        const q = questions[i];
+        const number = isUnicode ? toBanglaNumber(i + 1) : i + 1;
+        const label = isUnicode ? "উত্তর: " : "DËi: ";
+        const answerPara = anchorRange.insertParagraph(`${number}. ${label}`, "Before");
+        mcqApplyFontSafe(answerPara, targetFont, origSize, origBold, origItalic);
+        answerPara.alignment = origAlign;
+        
+        let detectedAnswer = q.answer;
+        if (q.options && q.options.length > 0) {
+            const lastOpt = q.options[q.options.length - 1];
+            if (typeof lastOpt[1] === "string") {
+                const match = lastOpt[1].match(/\s+([PQRS])\s*$/i);
+                if (match && !detectedAnswer) {
+                    const map = { "P": "ক", "Q": "খ", "R": "গ", "S": "ঘ" };
+                    detectedAnswer = map[match[1].toUpperCase()];
+                }
+            }
+        }
+        if (detectedAnswer) {
+            if (useSymbols) {
+                const ansMap = { "P": "K", "Q": "L", "R": "M", "S": "N", "ক": "P", "খ": "Q", "গ": "R", "ঘ": "S" };
+                const marker = ansMap[detectedAnswer] || detectedAnswer;
+                const range = answerPara.insertText(marker, "End");
+                mcqApplyFontSafe(range, "ProshnaP", answerSize, false, origItalic);
+            } else {
+                const valMap = { "ক": "K", "খ": "L", "গ": "M", "ঘ": "N" };
+                const normAns = normalizeAnswerLabel(detectedAnswer);
+                const finalVal = isUnicode ? normAns : (valMap[normAns] || normAns);
+                const range = answerPara.insertText(finalVal, "End");
+                mcqApplyFontSafe(range, targetFont, origSize, false, origItalic);
+            }
+        }
+        if (q.explanation) {
+            const expLabel = isUnicode ? " ব্যাখ্যা: " : " e¨vL¨v: ";
+            const safe = String(q.explanation).replace(/[\r\n\v]/g, " ").trim();
+            const expPara = anchorRange.insertParagraph(`${expLabel}${safe}`, "Before");
+            mcqApplyFontSafe(expPara, targetFont, origSize, origBold, origItalic);
+            expPara.alignment = origAlign;
+        }
+    }
+}
+
+async function formatSelectedText(type) {
+    try {
+        await Word.run(async (context) => {
+            const selection = context.document.getSelection();
+            const paragraphs = selection.paragraphs;
+            paragraphs.load("items");
+            await context.sync();
+
+            let origAlign = "Left", origBold = false, origItalic = false, originalParagraph = null;
+            if (paragraphs.items.length) {
+                originalParagraph = paragraphs.items[0];
+                originalParagraph.load("alignment, font/bold, font/italic");
+                await context.sync();
+                origAlign = originalParagraph.alignment || "Left";
+                origBold = originalParagraph.font.bold === true;
+                origItalic = originalParagraph.font.italic === true;
+            }
+            
+            selection.load("text, font/size");
+            await context.sync();
+            const text = selection.text || "";
+            const origSize = Number(selection.font.size) || 10.5;
+            
+            if (!text.trim()) { showStatus("Please select some text in the document first!", true); return; }
+            let tabStops = [];
+            if (originalParagraph) tabStops = await mcqReadSelectedParagraphTabStops(context, originalParagraph);
+            const columnWidth = await mcqGetCurrentColumnWidth(context);
+            
+            const isUnicode = /[\u0980-\u09FF]/.test(text);
+            const targetFont = isUnicode ? "Kalpurush" : "SutonnyMJ";
+            
+            let questions = parseQuestions(text);
+            if (!questions.length) { showStatus("No valid questions found in selection!", true); return; }
+            
+            const shuffleElement = document.getElementById("shuffleCheck");
+            if (shuffleElement && shuffleElement.checked) questions = questions.map(q => shuffleOptions(q));
+            
+            const normStyle = document.getElementById("norm-marker-style");
+            const smartStyle = document.getElementById("smart-marker-style");
+            const useSymbols = type === "normal" 
+                ? (!normStyle || normStyle.value !== "text") 
+                : (!smartStyle || smartStyle.value !== "text");
+
+            const optFontElement = document.getElementById("norm-opt-font");
+            const optSizeElement = document.getElementById("norm-opt-size");
+            const normalAnswerElement = document.getElementById("norm-ans-size");
+            const smartAnswerElement = document.getElementById("smart-ans-size");
+            
+            const optionFont = optFontElement && optFontElement.value.trim() ? optFontElement.value.trim() : "BanglaOMR";
+            const optionSize = optSizeElement && parseFloat(optSizeElement.value) > 0 ? parseFloat(optSizeElement.value) : 9;
+            const normalAnswerSize = normalAnswerElement && parseFloat(normalAnswerElement.value) > 0 ? parseFloat(normalAnswerElement.value) : 10;
+            const smartAnswerSize = smartAnswerElement && parseFloat(smartAnswerElement.value) > 0 ? parseFloat(smartAnswerElement.value) : 10;
+            
+            const anchorRange = selection.insertText(" ", "Replace");
+            
+            for (let i = 0; i < questions.length; i++) {
+                const q = questions[i];
+                const safeQuestion = String(q.question || "").replace(/[\r\n\v]/g, " ").trim();
+                const qNum = isUnicode ? toBanglaNumber(i + 1) : i + 1;
+                
+                const qPara = anchorRange.insertParagraph(`${qNum}. ${safeQuestion}`, "Before");
+                mcqApplyFontSafe(qPara, targetFont, origSize, origBold, origItalic);
+                qPara.alignment = origAlign;
+                
+                const layout = mcqDetectAutoOptionLayout(q.options, tabStops, columnWidth, optionFont, optionSize, targetFont, origSize, origBold, useSymbols, isUnicode);
+                
+                if (type === "normal") {
+                    mcqInsertNormalOptions(anchorRange, q, layout, optionFont, optionSize, targetFont, origSize, origAlign, origBold, origItalic, normalAnswerSize, useSymbols, isUnicode);
+                    mcqInsertNormalExplanation(anchorRange, q.explanation, isUnicode, targetFont, origSize, origAlign, origBold, origItalic);
+                } else if (type === "smart") {
+                    mcqInsertSmartOptions(anchorRange, q, layout, optionFont, optionSize, targetFont, origSize, origAlign, origBold, origItalic, useSymbols, isUnicode);
+                }
+            }
+            if (type === "smart") mcqInsertSmartAnswerPage(anchorRange, questions, isUnicode, targetFont, origSize, origAlign, origBold, origItalic, smartAnswerSize, useSymbols);
+            
+            anchorRange.delete();
+            await context.sync();
+            showStatus(`${questions.length} MCQs formatted successfully!`);
+        });
+    } catch (error) { showStatus("Error: " + (error.message || "Unknown error"), true); }
+}
+
+async function formatQuestionsMacro() {
+    try {
+        await Word.run(async (context) => {
+            const selection = context.document.getSelection();
+            const paragraphs = selection.paragraphs;
+            paragraphs.load("items");
+            await context.sync();
+            
+            if (paragraphs.items.length === 0) { showStatus("Please select text first.", true); return; }
+            
+            let numStyle = document.getElementById("num-style").value;
+            let matchingParagraphs = [];
+            for (let i = 0; i < paragraphs.items.length; i++) { paragraphs.items[i].load("text"); }
+            await context.sync();
+            
+            for (let i = 0; i < paragraphs.items.length; i++) {
+                let p = paragraphs.items[i];
+                let text = p.text.trim();
+                if (text.length < 2) continue;
+                if (/^\s*\(?[কখগঘA-D]\)?[\.\)।:]\s+/i.test(text)) continue;
+                if (/^\s*(?:সঠিক উত্তর|উ|উত্তর|Ans|Answer|mwVK DËi|DËi|ব্যাখ্যা|Explanation|e¨vL¨v)/i.test(text)) continue;
+                
+                let hasNumber = /^\s*(?:\d+|[০-৯]+|[a-zA-Z]|[iIvVxXlLcCdDmMoO]+)\s*[\.\)।]/.test(text);
+                let lastChar = text.slice(-1);
+                let endsWithPunctuation = ["?", "؟", "—", "-", ":"].includes(lastChar);
+                
+                if (hasNumber || endsWithPunctuation || text.includes("?")) matchingParagraphs.push(p);
+            }
+
+            if (matchingParagraphs.length === 0) { showStatus("No questions detected.", true); return; }
+
+            if (numStyle.startsWith("auto-")) {
+                let list = matchingParagraphs[0].startNewList();
+                list.load("id");
+                await context.sync();
+                
+                let listLevelType = Word.ListNumbering.arabic;
+                if (numStyle === "auto-roman") listLevelType = Word.ListNumbering.lowerRoman;
+                if (numStyle === "auto-alpha") listLevelType = Word.ListNumbering.lowerLetter;
+                
+                list.setLevelNumbering(0, listLevelType);
+                
+                for (let i = 0; i < matchingParagraphs.length; i++) {
+                    let p = matchingParagraphs[i];
+                    p.font.bold = true;
+                    if (i > 0) p.attachToList(list.id, 0);
+                }
+                await context.sync();
+            } else {
+                let qCount = 0;
+                for (let i = 0; i < matchingParagraphs.length; i++) {
+                    let p = matchingParagraphs[i];
+                    p.font.bold = true; 
+                    
+                    let text = p.text.trim();
+                    let hasNumber = /^\s*(?:\d+|[০-৯]+|[a-zA-Z]|[iIvVxXlLcCdDmMoO]+)\s*[\.\)।]/.test(text);
+                    
+                    if (!hasNumber) {
+                        let numText = getSequenceString(qCount, numStyle);
+                        let numRange = p.insertText(numText, "Start");
+                        numRange.font.bold = true;
+                    }
+                    qCount++;
+                }
+                await context.sync();
+            }
+            showStatus(`Numbered and Bolded ${matchingParagraphs.length} Questions!`);
+        });
+    } catch (error) { showStatus("Error: " + (error.message || "Unknown"), true); }
+}
+
+// ==========================================
+// DUPLICATE FINDER LOGIC
+// ==========================================
+function dupNormalizeUnicode(text) { return String(text || "").normalize("NFC").replace(/[\u200B-\u200D\uFEFF]/g, ""); }
+function dupNormalizeDigits(text) { return text.replace(/[০-৯]/g, ch => ({"০":"0","১":"1","২":"2","৩":"3","৪":"4","৫":"5","৬":"6","৭":"7","৮":"8","৯":"9"}[ch])); }
+function dupNormalizeWhitespace(text) { return text.replace(/[\t\r\n\v\u00A0]+/g, " ").replace(/\s{2,}/g, " ").trim(); }
+function dupStripPunctuation(text) { return text.replace(/[?!?।,:;؛'"“”‘’`~|\/\\()[\]{}<>+=*_\-–—]/g, " "); }
+function dupNormalizeText(text, opts = {}) {
+    let out = dupNormalizeUnicode(text);
+    out = dupNormalizeDigits(out);
+    if (opts.ignoreNumbers) out = out.replace(/\b\d+(?:[.,/]\d+)*\b/g, " ");
+    if (opts.ignorePunctuation) out = dupStripPunctuation(out);
+    return dupNormalizeWhitespace(out.toLocaleLowerCase());
+}
+function dupExtractNumbers(text) { return dupNormalizeDigits(dupNormalizeUnicode(text)).match(/\d+(?:[.,/]\d+)*/g) || []; }
+function dupTokenize(text) { return dupNormalizeWhitespace(text).split(/\s+/).filter(Boolean); }
+function dupJaccard(a, b) {
+    const A = new Set(dupTokenize(a)), B = new Set(dupTokenize(b));
+    if (!A.size && !B.size) return 1; if (!A.size || !B.size) return 0;
+    let intersection = 0; A.forEach(x => { if (B.has(x)) intersection++; });
+    return intersection / (A.size + B.size - intersection);
+}
+function dupLevenshtein(a, b) {
+    if (a === b) return 0; if (!a.length) return b.length; if (!b.length) return a.length;
+    if (a.length > b.length) [a, b] = [b, a];
+    let prev = Array.from({length: a.length + 1}, (_, i) => i);
+    for (let j = 1; j <= b.length; j++) {
+        const cur = [j];
+        for (let i = 1; i <= a.length; i++) {
+            const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+            cur[i] = Math.min(cur[i - 1] + 1, prev[i] + 1, prev[i - 1] + cost);
+        }
+        prev = cur;
+    }
+    return prev[a.length];
+}
+function dupCharSimilarity(a, b) { const max = Math.max(a.length, b.length); return !max ? 1 : 1 - dupLevenshtein(a, b) / max; }
+function dupNumberDifference(a, b) {
+    const A = dupExtractNumbers(a), B = dupExtractNumbers(b);
+    if (!A.length && !B.length) return false; if (A.length !== B.length) return true;
+    return A.some((x, i) => x !== B[i]);
+}
+function dupOptionTexts(mcq) { return (mcq.options || []).map(x => Array.isArray(x) ? x[1] : (x.text || "")); }
+function dupOptionMultisetSimilarity(a, b, opts) {
+    const A = dupOptionTexts(a).map(x => dupNormalizeText(x, opts)).filter(Boolean);
+    const B = dupOptionTexts(b).map(x => dupNormalizeText(x, opts)).filter(Boolean);
+    if (!A.length && !B.length) return 1; if (A.length !== B.length) return 0;
+    const used = new Set(); let total = 0;
+    for (const x of A) {
+        let best = 0, bestIndex = -1;
+        for (let i = 0; i < B.length; i++) {
+            if (used.has(i)) continue;
+            const sim = Math.max(dupJaccard(x, B[i]), dupCharSimilarity(x, B[i]));
+            if (sim > best) { best = sim; bestIndex = i; }
+        }
+        if (bestIndex >= 0) { used.add(bestIndex); total += best; }
+    }
+    return total / A.length;
+}
+function dupSameOptionOrder(a, b, opts) {
+    const A = dupOptionTexts(a).map(x => dupNormalizeText(x, opts)), B = dupOptionTexts(b).map(x => dupNormalizeText(x, opts));
+    if (A.length !== B.length) return false;
+    return A.every((x, i) => Math.max(dupJaccard(x, B[i]), dupCharSimilarity(x, B[i])) >= 0.9);
+}
+function dupBuildComparable(mcq, opts) {
+    return {
+        question: dupNormalizeText(mcq.question, {...opts, ignoreNumbers: false}),
+        options: dupOptionTexts(mcq).map(x => dupNormalizeText(x, {...opts, ignoreNumbers: false})),
+        answer: normalizeAnswerLabel(mcq.answer || ""),
+        numbers: dupExtractNumbers(mcq.question + " " + dupOptionTexts(mcq).join(" "))
+    };
+}
+function dupSimilarity(a, b, opts) {
+    const A = dupBuildComparable(a, opts), B = dupBuildComparable(b, opts);
+    const q1 = A.question, q2 = B.question;
+    const questionExact = q1 === q2;
+    const questionToken = dupJaccard(q1, q2), questionChar = dupCharSimilarity(q1, q2);
+    const questionScore = questionExact ? 1 : (0.45 * questionToken + 0.55 * questionChar);
+    const optionScore = opts.compareOptions ? dupOptionMultisetSimilarity(a, b, opts) : 1;
+    const sameOrder = dupSameOptionOrder(a, b, opts);
+    const numericDifference = opts.protectNumbers && dupNumberDifference(a.question + " " + dupOptionTexts(a).join(" "), b.question + " " + dupOptionTexts(b).join(" "));
+    let score = (questionScore * 0.72) + (optionScore * 0.28);
+    if (numericDifference) score = Math.min(score, 0.82);
+    const answerConflict = !!A.answer && !!B.answer && A.answer !== B.answer && questionScore >= 0.9 && optionScore >= 0.75;
+    return {
+        score, questionScore, optionScore, sameOrder, optionReordered: opts.ignoreOptionOrder && !sameOrder && optionScore >= 0.9,
+        numericDifference, answerConflict, exact: questionExact && optionScore >= 0.999 && !numericDifference, questionOnlySame: questionExact
+    };
+}
+function dupCandidateSignature(mcq, opts) {
+    const tokens = dupTokenize(
+        dupNormalizeText(mcq.question, {
+            ignorePunctuation: true,
+            ignoreNumbers: false
+        })
+    ).filter(t => t.length > 1);
+
+    return `${tokens.length}\vert{}${tokens.slice(0, 4).join(" ")}`;
+}
+function dupMakeGroups(matches, count) {
+    const parent = Array.from({length: count}, (_, i) => i);
+    const find = x => parent[x] === x ? x : (parent[x] = find(parent[x]));
+    matches.forEach(m => { let a = find(m.a), b = find(m.b); if (a !== b) parent[b] = a; });
+    const groups = new Map();
+    matches.forEach(m => { const root = find(m.a); if (!groups.has(root)) groups.set(root, []); groups.get(root).push(m); });
+    return [...groups.values()].map((edges, idx) => {
+        const ids = [...new Set(edges.flatMap(e => [e.a, e.b]))];
+        return { id: idx + 1, ids, edges, strongest: edges.reduce((x, y) => y.analysis.score > x.analysis.score ? y : x, edges[0]), exact: edges.some(e => e.analysis.exact), conflict: edges.some(e => e.analysis.answerConflict) };
+    });
+}
+function dupEscapeHtml(text) { return String(text || "").replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[ch])); }
+function dupNormalizeForParagraphMatch(text) { return dupNormalizeText(text, {ignorePunctuation: true, ignoreNumbers: false}).toLowerCase(); }
+function dupParagraphLooksLikeQuestion(paragraphText, mcq) {
+    const p = dupNormalizeForParagraphMatch(paragraphText), q = dupNormalizeForParagraphMatch(mcq.question);
+    if (!p || !q) return false; if (p.includes(q)) return true;
+    const needle = q.split(/\s+/).filter(Boolean).slice(0, 10).join(" ");
+    return needle.length >= 8 && p.includes(needle);
+}
+async function dupReadWordParagraphs(context, selection) {
+    const paragraphs = selection.paragraphs; paragraphs.load("items"); await context.sync();
+    const supportsUniqueId = Office.context.requirements && Office.context.requirements.isSetSupported("WordApi", "1.6");
+    for (const p of paragraphs.items) {
+        p.load("text,isListItem"); p.listItemOrNullObject.load("isNullObject,listString");
+        if (supportsUniqueId) p.load("uniqueLocalId");
+    }
+    await context.sync();
+    return paragraphs.items.map((p, index) => ({
+        index, text: p.text || "", isListItem: !!p.isListItem, listString: p.listItemOrNullObject && !p.listItemOrNullObject.isNullObject ? (p.listItemOrNullObject.listString || "") : "", uniqueLocalId: supportsUniqueId ? (p.uniqueLocalId || null) : null
+    }));
+}
+function dupAttachWordMetadata(mcqs, paragraphInfos) {
+    const usedParagraphs = new Set(); let searchStart = 0;
+    for (const mcq of mcqs) {
+        let matched = null;
+        const candidates = [mcq._sourceLineIndex, mcq._sourceLineIndex - 1, mcq._sourceLineIndex + 1];
+        for (const idx of candidates) {
+            if (Number.isInteger(idx) && idx >= 0 && idx < paragraphInfos.length && !usedParagraphs.has(idx) && dupParagraphLooksLikeQuestion(paragraphInfos[idx].text, mcq)) { matched = paragraphInfos[idx]; break; }
+        }
+        if (!matched) {
+            for (let i = searchStart; i < paragraphInfos.length; i++) {
+                if (!usedParagraphs.has(i) && dupParagraphLooksLikeQuestion(paragraphInfos[i].text, mcq)) { matched = paragraphInfos[i]; break; }
+            }
+        }
+        if (!matched) {
+            for (let i = 0; i < paragraphInfos.length; i++) {
+                if (!usedParagraphs.has(i) && dupParagraphLooksLikeQuestion(paragraphInfos[i].text, mcq)) { matched = paragraphInfos[i]; break; }
+            }
+        }
+        if (matched) {
+            usedParagraphs.add(matched.index); searchStart = matched.index + 1;
+            const autoNumber = String(matched.listString || "").trim();
+            if (!mcq.questionNumber && autoNumber) mcq.questionNumber = autoNumber.replace(/[\s]+$/, "");
+            mcq.wordParagraphId = matched.uniqueLocalId || null;
+            mcq.wordDocumentOccurrence = matched.index;
+        }
+    }
+}
+function dupRenderQuestionSummary(mcq) {
+    const n = String(mcq && mcq.questionNumber || "").trim().replace(/[\s]+$/, "") || "Unnumbered";
+    return `<div class="font-semibold text-slate-700 text-xs">Q${dupEscapeHtml(n)}</div><div class="dup-question-text text-[11px] text-slate-600 mt-0.5">${dupEscapeHtml(mcq.question)}</div>`;
+}
+function renderDuplicateFinderResults(groups, mcqs, threshold) {
+    const root = document.getElementById("duplicateResults");
+    if (!groups.length) { root.innerHTML = `<div class="bg-green-50 border border-green-200 rounded-lg p-3 text-center text-xs text-green-700"><i class="fas fa-check-circle mr-1"></i>No duplicate or high-similarity MCQ groups found at ${threshold}% threshold.</div>`; return; }
+    root.innerHTML = groups.map(group => {
+        const pct = Math.round(group.strongest.analysis.score * 100);
+        const type = group.conflict ? "conflict" : (group.exact ? "exact" : (pct >= 95 ? "very-high" : "potential"));
+        const color = type === "exact" ? "red" : type === "conflict" ? "yellow" : type === "very-high" ? "orange" : "amber";
+        const label = type === "exact" ? "Exact Duplicate" : type === "conflict" ? "Answer Conflict" : type === "very-high" ? "Very High Similarity" : "Potential Duplicate";
+        const cards = group.ids.map(id => `<div class="border border-slate-200/80 rounded p-2 bg-white cursor-pointer hover:border-blue-400" onclick="navigateToDuplicateQuestion(${id})">${dupRenderQuestionSummary(mcqs[id])}</div>`).join("");
+        return `<details class="dup-result-card bg-${color}-50 border border-${color}-200 rounded-lg p-2" open>
+            <summary class="cursor-pointer list-none flex items-center justify-between"><span class="text-xs font-bold text-${color}-800"><i class="fas ${type === 'conflict' ? 'fa-exclamation-triangle' : type === 'exact' ? 'fa-copy' : 'fa-clone'} mr-1"></i>Group ${group.id} —${label}</span><span class="text-xs font-extrabold text-${color}-800">${pct}%</span></summary>
+            <div class="mt-2 space-y-2">${cards}<div class="flex gap-2"><button class="flex-1 text-[11px] bg-white border border-slate-200 rounded py-1 hover:bg-slate-50 font-medium" onclick="event.stopPropagation(); compareDuplicateQuestions(${group.strongest.a},${group.strongest.b})"><i class="fas fa-columns mr-1"></i>Compare</button></div></div>
+        </details>`;
+    }).join("");
+}
+async function runMCQDuplicateFinder() {
+    try {
+        await Word.run(async (context) => {
+            const selection = context.document.getSelection(); selection.load("text"); await context.sync();
+            const text = selection.text || ""; if (!text.trim()) { showStatus("Please select MCQs.", true); return; }
+            const mcqs = parseQuestions(text); if (mcqs.length < 2) { showStatus("Select at least two MCQs.", true); return; }
+            const paragraphInfos = await dupReadWordParagraphs(context, selection);
+            dupAttachWordMetadata(mcqs, paragraphInfos);
+            const threshold = Number(document.getElementById("duplicateThreshold").value || 85);
+            const opts = { ignoreNumbers: document.getElementById("dupIgnoreNumbers").checked, ignorePunctuation: document.getElementById("dupIgnorePunctuation").checked, ignoreOptionOrder: document.getElementById("dupIgnoreOptionOrder").checked, detectConflicts: document.getElementById("dupDetectConflicts").checked, protectNumbers: document.getElementById("dupProtectNumbers").checked, compareOptions: document.getElementById("dupCompareOptions").checked };
+            const matches = []; const buckets = new Map();
+            mcqs.forEach((q, i) => { const key = dupCandidateSignature(q, opts); if (!buckets.has(key)) buckets.set(key, []); buckets.get(key).push(i); });
+            const compared = new Set();
+            for (const indices of buckets.values()) {
+                for (let x = 0; x < indices.length; x++) {
+                    for (let y = x + 1; y < indices.length; y++) {
+                        const a = indices[x], b = indices[y], key = a < b ? `${a}:${b}` : `${b}:${a}`;
+                        if (compared.has(key)) continue; compared.add(key);
+                        const analysis = dupSimilarity(mcqs[a], mcqs[b], opts);
+                        if (analysis.exact || (opts.detectConflicts && analysis.answerConflict) || (analysis.score * 100) >= threshold) matches.push({a,b,analysis});
+                    }
+                }
+            }
+            const groups = dupMakeGroups(matches, mcqs.length);
+            MCQ_DUPLICATE_STATE.results = groups; MCQ_DUPLICATE_STATE.mcqs = mcqs;
+            document.getElementById("duplicateSummary").classList.remove("hidden");
+            document.getElementById("dupExactCount").textContent = groups.filter(g => g.exact).length;
+            document.getElementById("dupPotentialCount").textContent = groups.filter(g => !g.exact && !g.conflict).length;
+            document.getElementById("dupConflictCount").textContent = groups.filter(g => g.conflict).length;
+            document.getElementById("dupQuestionCount").textContent = mcqs.length;
+            renderDuplicateFinderResults(groups, mcqs, threshold);
+            showStatus(`Analysis completed: ${mcqs.length} MCQs scanned.`);
+        });
+    } catch (error) { showStatus("Duplicate Finder Error: " + (error.message || "Unknown error"), true); }
+}
+async function navigateToDuplicateQuestion(id) {
+    const mcq = MCQ_DUPLICATE_STATE.mcqs[id]; if (!mcq) return;
+    try {
+        await Word.run(async (context) => {
+            if (mcq.wordParagraphId && Office.context.requirements && Office.context.requirements.isSetSupported("WordApi", "1.6")) {
+                const p = context.document.getParagraphByUniqueLocalId(mcq.wordParagraphId); p.select(); await context.sync(); return;
+            }
+            const searchText = dupNormalizeWhitespace(mcq.question).slice(0, 255);
+            const ranges = context.document.body.search(searchText, {matchCase:false, matchWholeWord:false});
+            ranges.load("items/text"); await context.sync();
+            if (!ranges.items.length) { showStatus("Could not locate.", true); return; }
+            ranges.items[Number.isInteger(mcq.wordDocumentOccurrence) ? Math.min(mcq.wordDocumentOccurrence, ranges.items.length - 1) : 0].select();
+            await context.sync();
+        });
+    } catch (error) { showStatus("Navigation error.", true); }
+}
+function compareDuplicateQuestions(aId, bId) {
+    const a = MCQ_DUPLICATE_STATE.mcqs[aId], b = MCQ_DUPLICATE_STATE.mcqs[bId]; if (!a || !b) return;
+    const compareHtml = `<div id="duplicateComparePanel" class="fixed inset-x-3 top-16 bottom-3 bg-white border border-slate-300 rounded-xl shadow-2xl z-50 overflow-y-auto p-3.5 animate-[fadeIn_0.15s_ease-out]"><div class="flex items-center justify-between mb-2"><h3 class="text-xs font-bold uppercase tracking-wider text-slate-800"><i class="fas fa-columns mr-1 text-indigo-600"></i> Compare MCQs</h3><button onclick="document.getElementById('duplicateComparePanel').remove()" class="text-slate-400 hover:text-slate-800"><i class="fas fa-times"></i></button></div><div class="grid grid-cols-1 gap-2.5"><div class="border border-blue-200 rounded-lg p-2.5 bg-blue-50/40"><div class="text-xs font-bold text-blue-800 mb-1">Question A</div><div class="text-xs text-slate-700 dup-question-text">${dupEscapeHtml(a.question)}</div>${dupOptionTexts(a).map((x,i)=>`<div class="mt-1 text-[11px] text-slate-600">${OPTION_ORDER[i]||(i+1)+'.'} ${dupEscapeHtml(x)}</div>`).join('')}</div><div class="border border-purple-200 rounded-lg p-2.5 bg-purple-50/40"><div class="text-xs font-bold text-purple-800 mb-1">Question B</div><div class="text-xs text-slate-700 dup-question-text">${dupEscapeHtml(b.question)}</div>${dupOptionTexts(b).map((x,i)=>`<div class="mt-1 text-[11px] text-slate-600">${OPTION_ORDER[i]||(i+1)+'.'} ${dupEscapeHtml(x)}</div>`).join('')}</div></div></div>`;
+    const old = document.getElementById("duplicateComparePanel"); if (old) old.remove(); document.body.insertAdjacentHTML("beforeend", compareHtml);
+}
+
+// --- QUESTION BANK LOGIC ---
+function updateBankCount() {
+    let bank = JSON.parse(localStorage.getItem("mcq_studio_bank") || "[]");
+    let countEl = document.getElementById("bank-count");
+    if (countEl) countEl.innerText = bank.length;
+}
+
+async function addSelectedToBank() {
+    try {
+        await Word.run(async (context) => {
+            const selection = context.document.getSelection();
+            selection.load("text");
+            await context.sync();
+            const text = selection.text;
+            if (!text || !text.trim()) { showStatus("Please select MCQs to add to Bank!", true); return; }
+            let questions = parseQuestions(text);
+            if (questions.length === 0) { showStatus("No valid questions found to add!", true); return; }
+            let bank = JSON.parse(localStorage.getItem("mcq_studio_bank") || "[]");
+            let added = 0;
+            questions.forEach(q => {
+                let exists = bank.find(bq => bq.question.trim() === q.question.trim());
+                if (!exists) {
+                    q.id = "mcq_" + Date.now().toString() + Math.random().toString(36).substr(2, 5);
+                    q.addedOn = new Date().toISOString();
+                    bank.push(q);
+                    added++;
+                }
+            });
+            localStorage.setItem("mcq_studio_bank", JSON.stringify(bank));
+            updateBankCount();
+            if(added > 0) { showStatus(`Added ${added} new MCQs to Bank!`); } else { showStatus(`Selected MCQs already exist in Bank!`, true); }
+        });
+    } catch (error) { showStatus("Error: " + (error.message || "Unknown"), true); }
+}
+
+function exportBankJSON() {
+    let bankData = localStorage.getItem("mcq_studio_bank");
+    if (!bankData || bankData === "[]") { showStatus("Bank is empty!", true); return; }
+    let blob = new Blob([bankData], {type: "application/json"});
+    let url = URL.createObjectURL(blob);
+    let a = document.createElement("a");
+    a.href = url;
+    a.download = "Foliora_MCQ_Bank_Export.json";
+    a.click();
+    showStatus("Bank exported successfully!");
+}
+
+function importBankJSON(e) {
+    let file = e.target.files[0];
+    if (!file) return;
+    let reader = new FileReader();
+    reader.onload = function(evt) {
+        try {
+            let imported = JSON.parse(evt.target.result);
+            if (!Array.isArray(imported)) throw new Error("Invalid format");
+            let bank = JSON.parse(localStorage.getItem("mcq_studio_bank") || "[]");
+            let added = 0;
+            imported.forEach(q => {
+                if (q.question && !bank.find(bq => bq.question.trim() === q.question.trim())) {
+                    if (!q.id) q.id = "mcq_" + Date.now().toString() + Math.random().toString(36).substr(2, 5);
+                    bank.push(q); added++;
+                }
+            });
+            localStorage.setItem("mcq_studio_bank", JSON.stringify(bank));
+            updateBankCount();
+            showStatus(`Imported ${added} new MCQs!`);
+        } catch (err) { showStatus("Error importing file! Invalid JSON.", true); }
+        document.getElementById('importBankFile').value = '';
+    };
+    reader.readAsText(file);
+}
+
+function openBankViewer() {
+    const old = document.getElementById("bankViewerPanel");
+    if (old) old.remove();
+    const panelHtml = `
+    <div id="bankViewerPanel" class="fixed inset-x-3 top-16 bottom-3 bg-white border border-slate-300 rounded-xl shadow-2xl z-50 flex flex-col p-3.5 animate-[fadeIn_0.15s_ease-out]">
+        <div class="flex items-center justify-between mb-2">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-800"><i class="fas fa-database mr-1 text-emerald-600"></i> Foliora Question Bank</h3>
+            <button onclick="document.getElementById('bankViewerPanel').remove()" class="text-slate-400 hover:text-red-500 transition"><i class="fas fa-times text-base"></i></button>
+        </div>
+        <div class="mb-2 relative">
+            <input type="text" id="bankSearchInput" placeholder="Search questions or options..." class="w-full pl-8 p-1.5 border rounded-lg text-xs focus:ring-2 focus:ring-emerald-400 outline-none bg-slate-50">
+            <i class="fas fa-search absolute left-2.5 top-2.5 text-slate-400 text-xs"></i>
+        </div>
+        <div id="bankListContainer" class="flex-1 overflow-y-auto space-y-2 p-1"></div>
+    </div>`;
+    document.body.insertAdjacentHTML("beforeend", panelHtml);
+    document.getElementById("bankSearchInput").addEventListener("input", (e) => renderBankItems(e.target.value));
+    
+    document.getElementById("bankListContainer").addEventListener("click", (e) => {
+        const btn = e.target.closest(".bank-delete-btn");
+        if (btn) {
+            e.preventDefault();
+            e.stopPropagation();
+            deleteFromBank(btn.getAttribute("data-delete-bank-id"), btn);
+        }
+    });
+    renderBankItems();
+}
+
+function renderBankItems(query = "") {
+    let bank = JSON.parse(localStorage.getItem("mcq_studio_bank") || "[]");
+    let idsChanged = false;
+    bank.forEach((q, idx) => {
+        if (!q.id) {
+            q.id = "mcq_" + Date.now().toString(36) + "_" + idx + "_" + Math.random().toString(36).slice(2, 7);
+            idsChanged = true;
+        }
+    });
+    if (idsChanged) localStorage.setItem("mcq_studio_bank", JSON.stringify(bank));
+
+    let container = document.getElementById("bankListContainer");
+    if (query) {
+        const lowerQ = query.toLowerCase();
+        bank = bank.filter(q => q.question.toLowerCase().includes(lowerQ) || (q.options && q.options.some(o => o[1].toLowerCase().includes(lowerQ))));
+    }
+    if (bank.length === 0) {
+        container.innerHTML = `<div class="text-center text-slate-400 text-xs mt-10"><i class="fas fa-box-open text-3xl mb-2 opacity-40"></i><br>${query ? "No questions match your search." : "Bank is empty. Add some MCQs!"}</div>`;
+        return;
+    }
+    container.innerHTML = bank.slice().reverse().map((q, i) => {
+        let optionsHtml = (q.options || [])
+            .map((opt, idx) => {
+                const label = OPTION_ORDER[idx] || ((idx + 1) + '.');
+                const text = dupEscapeHtml(opt[1]);
+                return `<div class="mt-0.5 text-slate-600">${label}${text}</div>`;
+            })
+            .join('');
+        let answerHtml = q.answer ? `<div class="mt-1 font-semibold text-emerald-600 text-[11px]"><i class="fas fa-check-circle mr-1"></i>Ans: ${q.answer}</div>` : '';
+        return `
+        <div class="border border-slate-200 rounded-lg p-2.5 bg-slate-50/70 relative group hover:border-emerald-300 transition">
+            <button type="button" data-delete-bank-id="${dupEscapeHtml(q.id)}" class="bank-delete-btn absolute top-2.5 right-2.5 text-slate-400 hover:text-red-500 transition" title="Delete MCQ"><i class="fas fa-trash-alt text-xs"></i></button>
+            <div class="text-xs font-bold text-slate-800 dup-question-text pr-6">${dupEscapeHtml(q.question)}</div>
+            <div class="text-[11px] mt-1.5">${optionsHtml}${answerHtml}</div>
+        </div>`;
+    }).join("");
+}
+
+function deleteFromBank(id, btnElement) {
+    if (btnElement && btnElement.dataset.confirm !== "true") {
+        btnElement.dataset.confirm = "true";
+        btnElement.innerHTML = '<span class="text-[9px] font-bold text-red-600">Sure?</span>';
+        setTimeout(() => {
+            if(btnElement && btnElement.dataset.confirm === "true") {
+                btnElement.dataset.confirm = "false";
+                btnElement.innerHTML = '<i class="fas fa-trash-alt text-xs"></i>';
+            }
+        }, 3000);
+        return;
+    }
+    let bank = JSON.parse(localStorage.getItem("mcq_studio_bank") || "[]");
+    const before = bank.length;
+    bank = bank.filter(q => String(q.id || "") !== String(id));
+    if (bank.length === before) {
+        showStatus("Could not find this MCQ in the Question Bank.", true);
+        return;
+    }
+    localStorage.setItem("mcq_studio_bank", JSON.stringify(bank));
+    updateBankCount();
+    let searchInput = document.getElementById("bankSearchInput");
+    renderBankItems(searchInput ? searchInput.value : "");
+    showStatus("Question removed from Bank!");
+}
+
+// --- SET GENERATOR & EXAM PAPER GENERATOR ---
+function mcqInsertSetOptionsWithAnswer(anchorRange, question, layout, optionFont, optionSize, targetFont, targetSize, origAlign, answerSize, useSymbols, isUnicode) {
+    const count = Math.min(4, (question.options || []).length);
+    let lastParagraph = null;
+
+    const insertOptionRun = (paragraph, option, leadingTab) => {
+        if (!option) return;
+        const labelText = option[0] || "";
+        const label = useSymbols ? (OPTION_EXPORT_MAP[labelText] || labelText) : getStandardOptionMarker(labelText, isUnicode);
+        
+        let text = String(option[1] || "").replace(/[\r\n\v]/g, " ").trim();
+        text = text.replace(/\s+([PQRS])\s*$/i, "").trim();
+
+        if (leadingTab) {
+            const r = paragraph.insertText("\t", "End");
+            mcqApplyFontSafe(r, targetFont, targetSize, false, false);
+        }
+        const marker = paragraph.insertText(label, "End");
+        mcqApplyFontSafe(marker, useSymbols ? optionFont : targetFont, useSymbols ? optionSize : targetSize, false, false);
+        const body = paragraph.insertText(" " + text, "End");
+        mcqApplyFontSafe(body, targetFont, targetSize, false, false);
+    };
+
+    if (layout.mode === "two-per-line") {
+        for (let j = 0; j < count; j += 2) {
+            const p = anchorRange.insertParagraph("", "Before");
+            lastParagraph = p;
+            p.alignment = origAlign;
+            insertOptionRun(p, question.options[j], true);
+            if (j + 1 < count) {
+                const midTab = p.insertText("\t", "End");
+                mcqApplyFontSafe(midTab, targetFont, targetSize, false, false);
+                insertOptionRun(p, question.options[j + 1], false);
+            }
+
+            if (j + 2 >= count && question.answer) {
+                const ansMarker = useSymbols ? (ANSWER_EXPORT_MAP[question.answer] || question.answer) : getStandardAnswerMarker(question.answer, isUnicode);
+                const tab = p.insertText("\t", "End");
+                mcqApplyFontSafe(tab, targetFont, targetSize, false, false);
+                const ansRange = p.insertText(ansMarker, "End");
+                mcqApplyFontSafe(ansRange, useSymbols ? "ProshnaP" : targetFont, useSymbols ? answerSize : targetSize, false, false);
+            }
+        }
+    } else {
+        for (let j = 0; j < count; j++) {
+            const p = anchorRange.insertParagraph("", "Before");
+            lastParagraph = p;
+            p.alignment = origAlign;
+            insertOptionRun(p, question.options[j], true);
+            if (j === count - 1 && question.answer) {
+                const ansMarker = useSymbols ? (ANSWER_EXPORT_MAP[question.answer] || question.answer) : getStandardAnswerMarker(question.answer, isUnicode);
+                const tab = p.insertText("\t", "End");
+                mcqApplyFontSafe(tab, targetFont, targetSize, false, false);
+                const ansRange = p.insertText(ansMarker, "End");
+                mcqApplyFontSafe(ansRange, useSymbols ? "ProshnaP" : targetFont, useSymbols ? answerSize : targetSize, false, false);
+            }
+        }
+    }
+    return lastParagraph;
+}
+
+async function generateMCQSet() {
+    try {
+        await Word.run(async (context) => {
+            let bank = JSON.parse(localStorage.getItem("mcq_studio_bank") || "[]");
+            if (!bank.length) { showStatus("Question Bank is empty! Add MCQs first.", true); return; }
+
+            let count = parseInt(document.getElementById("set-count")?.value, 10) || 25;
+            let startNum = parseInt(document.getElementById("set-start")?.value, 10) || 1;
+            let setCount = parseInt(document.getElementById("set-number-of-sets")?.value, 10) || 1;
+            const shuffleQ = !!document.getElementById("set-shuffle-q")?.checked;
+            const shuffleO = !!document.getElementById("set-shuffle-o")?.checked;
+            count = Math.max(1, Math.min(count, bank.length));
+            setCount = Math.max(1, Math.min(setCount, 10));
+
+            const selection = context.document.getSelection();
+            selection.load("font/size");
+            const selParas = selection.paragraphs;
+            selParas.load("items");
+            await context.sync();
+
+            let origAlign = "Left";
+            const origSize = selection.font.size || 10.5;
+            let originalParagraph = null;
+            if (selParas.items.length) {
+                originalParagraph = selParas.items[0];
+                originalParagraph.load("alignment");
+                await context.sync();
+                origAlign = originalParagraph.alignment || "Left";
+            }
+
+            const tabStops = originalParagraph ? await mcqReadSelectedParagraphTabStops(context, originalParagraph) : [];
+            const columnWidth = await mcqGetCurrentColumnWidth(context);
+            const isUnicode = bank.some(q => /[\u0980-\u09FF]/.test(String(q.question || "")));
+            const targetFont = isUnicode ? "Kalpurush" : "SutonnyMJ";
+            
+            const optFont = (document.getElementById("norm-opt-font")?.value || "BanglaOMR").trim() || "BanglaOMR";
+            const optSize = parseFloat(document.getElementById("norm-opt-size")?.value) || 9;
+            const ansSize = parseFloat(document.getElementById("norm-ans-size")?.value) || 10;
+            
+            const setMarkerStyle = document.getElementById("set-marker-style");
+            const useSymbols = !setMarkerStyle || setMarkerStyle.value !== "text";
+
+            const anchorRange = selection.insertText("", "Replace");
+
+            for (let setIdx = 0; setIdx < setCount; setIdx++) {
+                if (setIdx > 0) anchorRange.insertBreak("Page", "Before");
+
+                const setTitle = setCount > 1
+                    ? (isUnicode ? `প্রশ্ন সেট ${toBanglaNumber(setIdx + 1)}` : `Question Set ${setIdx + 1}`)
+                    : "";
+                if (setTitle) {
+                    const tp = anchorRange.insertParagraph(setTitle, "Before");
+                    mcqApplyFontSafe(tp, targetFont, origSize + 2, true, false);
+                    tp.alignment = "Centered";
+                    anchorRange.insertParagraph("", "Before");
+                }
+
+                let pool = JSON.parse(JSON.stringify(bank));
+                if (shuffleQ) {
+                    for (let i = pool.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [pool[i], pool[j]] = [pool[j], pool[i]];
+                    }
+                }
+                const selectedQs = pool.slice(0, count);
+
+                for (let i = 0; i < selectedQs.length; i++) {
+                    let q = JSON.parse(JSON.stringify(selectedQs[i]));
+                    sanitizeQuestionAnswers(q);
+                    if (shuffleO) q = shuffleOptions(q);
+
+                    const qNum = startNum + i;
+                    const qNumStr = isUnicode ? toBanglaNumber(qNum) : qNum;
+                    const safeQuestion = String(q.question || "").replace(/[\r\n\v]/g, " ").trim();
+                    const qPara = anchorRange.insertParagraph(`${qNumStr}.${safeQuestion}`, "Before");
+                    mcqApplyFontSafe(qPara, targetFont, origSize, false, false);
+                    qPara.alignment = origAlign;
+
+                    const layout = mcqDetectAutoOptionLayout(q.options, tabStops, columnWidth, optFont, optSize, targetFont, origSize, false, useSymbols, isUnicode);
+                    mcqInsertSetOptionsWithAnswer(anchorRange, q, layout, optFont, optSize, targetFont, origSize, origAlign, ansSize, useSymbols, isUnicode);
+                }
+            }
+
+            await context.sync();
+            showStatus(`${setCount} set${setCount > 1 ? "s" : ""} generated successfully with inline answers.`);
+        });
+    } catch (error) {
+        showStatus("Error: " + (error.message || error.code || "Unknown"), true);
+    }
+}
+
+async function generateExamPaper() {
+    try {
+        await Word.run(async (context) => {
+            let bank = JSON.parse(localStorage.getItem("mcq_studio_bank") || "[]");
+            if (bank.length === 0) { showStatus("Question Bank is empty! Add MCQs first.", true); return; }
+
+            let title = document.getElementById("exam-title").value.trim() || "Exam Paper";
+            let numSets = parseInt(document.getElementById("exam-sets").value) || 1;
+            if (numSets < 1) numSets = 1;
+            if (numSets > 10) numSets = 10;
+
+            let doShuffle = document.getElementById("exam-shuffle").checked;
+            let showKey = document.getElementById("exam-ans-key").checked;
+
+            const selection = context.document.getSelection();
+            selection.load("font/size");
+            const selParas = selection.paragraphs;
+            selParas.load("items");
+            await context.sync();
+
+            let origAlign = "Left";
+            let origSize = selection.font.size || 10.5;
+            let originalParagraph = null;
+
+            if (selParas.items.length > 0) {
+                originalParagraph = selParas.items[0];
+                originalParagraph.load("alignment");
+                await context.sync();
+                origAlign = originalParagraph.alignment || "Left";
+            }
+
+            let tabStops = [];
+            if (originalParagraph) {
+                tabStops = await mcqReadSelectedParagraphTabStops(context, originalParagraph);
+            }
+            const columnWidth = await mcqGetCurrentColumnWidth(context);
+
+            let isUnicode = /[\u0980-\u09FF]/.test(bank[0].question) || /[\u0980-\u09FF]/.test(title);
+            let targetFont = isUnicode ? "Kalpurush" : "SutonnyMJ";
+            
+            let optFont = document.getElementById("norm-opt-font").value.trim() || "BanglaOMR";
+            let optSize = parseFloat(document.getElementById("norm-opt-size").value.trim()) || 9;
+
+            const examMarkerStyle = document.getElementById("exam-marker-style");
+            const useSymbols = !examMarkerStyle || examMarkerStyle.value !== "text";
+
+            let anchorRange = selection.insertText("", "Replace");
+            const setLabelsBN = ["ক", "খ", "গ", "ঘ", "ঙ", "চ", "ছ", "জ", "ঝ", "ঞ"];
+            const setLabelsEN = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
+
+            for (let setIdx = 0; setIdx < numSets; setIdx++) {
+                let pool = JSON.parse(JSON.stringify(bank));
+
+                if (doShuffle) {
+                    for (let i = pool.length - 1; i > 0; i--) {
+                        let j = Math.floor(Math.random() * (i + 1));
+                        [pool[i], pool[j]] = [pool[j], pool[i]];
+                    }
+                }
+
+                let answerKey = [];
+                if (setIdx > 0) { anchorRange.insertBreak("Page", "Before"); }
+
+                let setSuffix = numSets > 1 ? ` - ${isUnicode ? 'সেট ' + setLabelsBN[setIdx] : 'Set ' + setLabelsEN[setIdx]}` : "";
+                let setTitle = title + setSuffix;
+
+                let titlePara = anchorRange.insertParagraph(setTitle, "Before");
+                mcqApplyFontSafe(titlePara, targetFont, origSize + 4, true, false);
+                titlePara.alignment = "Centered";
+                anchorRange.insertParagraph("", "Before");
+
+                for (let i = 0; i < pool.length; i++) {
+                    let q = pool[i];
+                    
+                    sanitizeQuestionAnswers(q);
+                    if (doShuffle) q = shuffleOptions(q);
+
+                    let currentNum = i + 1;
+                    let qNumStr = isUnicode ? toBanglaNumber(currentNum) : currentNum;
+                    let safeQuestion = q.question.replace(/[\r\n\v]/g, "").trim();
+                    
+                    let qPara = anchorRange.insertParagraph(`${qNumStr}.${safeQuestion}`, "Before");
+                    mcqApplyFontSafe(qPara, targetFont, origSize, false, false);
+                    qPara.alignment = origAlign;
+
+                    const layout = mcqDetectAutoOptionLayout(
+                        q.options, tabStops, columnWidth, optFont, optSize, targetFont, origSize, false, useSymbols, isUnicode
+                    );
+
+                    const count = Math.min(4, q.options.length);
+
+                    if (layout.mode === "two-per-line") {
+                        for (let j = 0; j < count; j += 2) {
+                            const p = anchorRange.insertParagraph("", "Before");
+                            p.alignment = origAlign;
+                            
+                            let tab1 = p.insertText("\t", "End");
+                            mcqApplyFontSafe(tab1, targetFont, origSize, false, false);
+                            
+                            let mk1Label = useSymbols ? (OPTION_EXPORT_MAP[q.options[j][0]] || q.options[j][0]) : getStandardOptionMarker(q.options[j][0], isUnicode);
+                            let mk1 = p.insertText(mk1Label, "End");
+                            mcqApplyFontSafe(mk1, useSymbols ? optFont : targetFont, useSymbols ? optSize : origSize, false, false);
+                            let txt1 = p.insertText(` ${q.options[j][1].trim()}`, "End");
+                            mcqApplyFontSafe(txt1, targetFont, origSize, false, false);
+
+                            if (q.options[j + 1]) {
+                                let tab2 = p.insertText("\t", "End");
+                                mcqApplyFontSafe(tab2, targetFont, origSize, false, false);
+                                
+                                let mk2Label = useSymbols ? (OPTION_EXPORT_MAP[q.options[j+1][0]] || q.options[j+1][0]) : getStandardOptionMarker(q.options[j+1][0], isUnicode);
+                                let mk2 = p.insertText(mk2Label, "End");
+                                mcqApplyFontSafe(mk2, useSymbols ? optFont : targetFont, useSymbols ? optSize : origSize, false, false);
+                                let txt2 = p.insertText(` ${q.options[j+1][1].trim()}`, "End");
+                                mcqApplyFontSafe(txt2, targetFont, origSize, false, false);
+                            }
+                        }
+                    } else {
+                        for (let j = 0; j < count; j++) {
+                            const p = anchorRange.insertParagraph("", "Before");
+                            p.alignment = origAlign;
+
+                            let tab1 = p.insertText("\t", "End");
+                            mcqApplyFontSafe(tab1, targetFont, origSize, false, false);
+                            
+                            let mk1Label = useSymbols ? (OPTION_EXPORT_MAP[q.options[j][0]] || q.options[j][0]) : getStandardOptionMarker(q.options[j][0], isUnicode);
+                            let mk1 = p.insertText(mk1Label, "End");
+                            mcqApplyFontSafe(mk1, useSymbols ? optFont : targetFont, useSymbols ? optSize : origSize, false, false);
+                            let txt1 = p.insertText(` ${q.options[j][1].trim()}`, "End");
+                            mcqApplyFontSafe(txt1, targetFont, origSize, false, false);
+                        }
+                    }
+                    
+                    if (q.answer) {
+                        const ansMapUni = { "P": "ক", "Q": "খ", "R": "গ", "S": "ঘ", "K": "ক", "L": "খ", "M": "গ", "N": "ঘ", "A":"ক", "B":"খ", "C":"গ", "D":"ঘ", "ক":"ক", "খ":"খ", "গ":"গ", "ঘ":"ঘ" };
+                        const ansMapBijoy = { "P": "K", "Q": "L", "R": "M", "S": "N", "ক": "K", "খ": "L", "গ": "M", "ঘ": "N", "K": "K", "L": "L", "M": "M", "N": "N" };
+                        let norm = normalizeAnswerLabel(q.answer);
+                        let finalAns = isUnicode ? (ansMapUni[norm] || norm) : (ansMapBijoy[norm] || norm);
+                        answerKey.push(`${qNumStr}.${finalAns}`);
+                    }
+                }
+
+                if (showKey && answerKey.length > 0) {
+                    anchorRange.insertBreak("Page", "Before"); 
+                    
+                    let keyTitleStr = (isUnicode ? "উত্তরমালা" : "DËigvjv") + setSuffix;
+                    let keyTitle = anchorRange.insertParagraph(keyTitleStr, "Before");
+                    mcqApplyFontSafe(keyTitle, targetFont, origSize + 2, true, false);
+                    keyTitle.alignment = "Centered";
+                    anchorRange.insertParagraph("", "Before");
+
+                    let cols = 5;
+                    let rows = Math.ceil(answerKey.length / cols);
+                    let tableData = [];
+                    let ansIndex = 0;
+
+                    for (let r = 0; r < rows; r++) {
+                        let rowValues = [];
+                        for (let c = 0; c < cols; c++) {
+                            if (ansIndex < answerKey.length) {
+                                rowValues.push(answerKey[ansIndex]);
+                            } else {
+                                rowValues.push(""); 
+                            }
+                            ansIndex++;
+                        }
+                        tableData.push(rowValues);
+                    }
+
+                    let ansTable = anchorRange.insertTable(rows, cols, "Before", tableData);
+                    ansTable.style = "Table Grid";
+                    let tblRange = ansTable.getRange();
+                    mcqApplyFontSafe(tblRange, targetFont, origSize, false, false);
+                    tblRange.alignment = "Centered";
+                }
+            }
+
+            await context.sync();
+            showStatus(`${numSets > 1 ? numSets + ' Sets of ' : ''}Exam Paper generated successfully!`);
+        });
+    } catch (error) { showStatus("Error: " + (error.message || "Unknown"), true); }
+}
+
+
+
 // --- BUTTON EVENT WIRING ---
 let _eventsBound = false;
 
