@@ -38,6 +38,9 @@ const checks = [
   ["MCQ preserves per-option source font", app.includes("option._sourceStyle =")],
   ["MCQ preserves source font slots when supported", app.includes("range.font.nameAscii = style.ascii")],
   ["MCQ answer uses final option source font", app.includes("question?.answerStyle || question?.options?.[question.options.length - 1]?._sourceStyle")],
+  ["Bijoy to Unicode protects real English by source font", app.includes("const isBijoyFontName = (fontName) =>") && app.includes('selection.search("[A-Za-z][A-Za-z0-9]*"')],
+  ["Bijoy to Unicode no longer uses numeric placeholder markers", app.includes("String.fromCodePoint(0xE000 + protectedLatin.length)") && !app.includes('return "▲" + (protectedEng.length - 1) + "▲";')],
+  ["Bijoy to Unicode preserves literal brackets", app.includes("// Restore English exactly. Brackets and other punctuation are")],
 ];
 
 let failed = false;
