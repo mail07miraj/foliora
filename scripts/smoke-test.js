@@ -23,7 +23,11 @@ const checks = [
   ["manifest has support URL", manifest.includes("<SupportUrl")],
   ["manifest uses HTTPS source", manifest.includes("https://foliora-gamma.vercel.app/index.html")],
   ["mobile commerce guard present", app.includes("isMobileCommerceRestricted") && app.includes("applyMobileCommerceRestrictions")],
-  ["paid actions are marked for mobile policy", index.includes("data-paid-action")]
+  ["paid actions are marked for mobile policy", index.includes("data-paid-action")],
+  ["normal MCQ answer is inserted on final option", app.includes("if (j === count - 1) mcqInsertNormalAnswer") && app.includes("if (j + 2 >= count)")],
+  ["standard-text answer format is preserved in set generator", app.includes("mcqBuildPreservedAnswerText(question, normalizedAnswer) || getStandardAnswerMarker(normalizedAnswer, isUnicode)")],
+  ["embedded Bijoy answer markers are checked only on final option", app.includes("const lastIndex = q.options.length - 1")],
+  ["MCQ answer resolver is present", app.includes("function mcqResolveAnswer(question)")]
 ];
 
 let failed = false;
