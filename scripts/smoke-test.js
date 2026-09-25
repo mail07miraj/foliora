@@ -34,6 +34,10 @@ const checks = [
   ["MCQ options are explicitly non-bold", app.includes("questionFont, questionSize, questionAlign,\n                        false, false")],
   ["Number & Bold excludes option lines", app.includes("mcqIsOptionLine(current) || mcqIsAnswerLine(current) || mcqIsExplanationLine(current)")],
   ["Number & Bold supports unnumbered question before options", app.includes("if (mcqLooksLikeQuestionStart(current, next))")],
+  ["MCQ extracts actual source run font", app.includes("function mcqExtractFontFromOoxml(ooxml, fallbackFont = "")")],
+  ["MCQ preserves per-option source font", app.includes("option._sourceStyle =")],
+  ["MCQ preserves source font slots when supported", app.includes("range.font.nameAscii = style.ascii")],
+  ["MCQ answer uses final option source font", app.includes("question?.answerStyle || question?.options?.[question.options.length - 1]?._sourceStyle")],
 ];
 
 let failed = false;
