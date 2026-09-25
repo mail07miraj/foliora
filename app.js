@@ -981,27 +981,32 @@ function sanitizeQuestionAnswers(q) {
 
     // In Bijoy source, the answer is often stored at the end of the last
     // option as P/Q/R/S (or K/L/M/N). Strip that marker and preserve it.
-    for (let j = 0; j < q.options.length; j++) {
-        let text = q.options[j][1];
-        if (typeof text !== "string") continue;
+    // Only inspect the final option so ordinary English words ending in one
+    // of these letters are never altered in earlier options.
+    const lastIndex = q.options.length - 1;
+    if (lastIndex >= 0) {
+        const text = q.options[lastIndex][1];
+        if (typeof text === "string") {
+            const match = text.match(/(?:^|\s)([PQRSK-N])\s*$/i);
+            if (match) {
+                const answerMap = {
+                    "P":"ক","Q":"খ","R":"গ","S":"ঘ",
+                    "K":"ক","L":"খ","M":"গ","N":"ঘ"
+                };
+                const detected = answerMap[match[1].toUpperCase()];
+                const cleaned = text.replace(/\s+(?:[PQRSK-N])\s*$/i, "").trim();
 
-        const match = text.match(/(?:^|\s)([PQRSK-N])\s*$/i);
-        if (!match) continue;
-
-        const answerMap = {
-            "P":"ক","Q":"খ","R":"গ","S":"ঘ",
-            "K":"ক","L":"খ","M":"গ","N":"ঘ"
-        };
-        const detected = answerMap[match[1].toUpperCase()];
-
-        // Only treat the trailing letter as an answer marker when it is
-        // attached to an option containing actual text.
-        const cleaned = text.replace(/\s+(?:[PQRSK-N])\s*$/i, "").trim();
-        if (cleaned !== text.trim() && detected) {
-            q.options[j][1] = cleaned;
-            if (!q.answer) {
-                q.answer = detected;
-                q.original_answer = detected;
+                // If an explicit answer line exists, only remove the trailing
+                // marker when it agrees with that answer. Otherwise treat the
+                // marker as the legacy embedded answer.
+                const answerAgrees = !q.answer || normalizeAnswerLabel(q.answer) === detected;
+                if (cleaned && cleaned !== text.trim() && detected && answerAgrees) {
+                    q.options[lastIndex][1] = cleaned;
+                    if (!q.answer) {
+                        q.answer = detected;
+                        q.original_answer = detected;
+                    }
+                }
             }
         }
     }
@@ -1319,8 +1324,8 @@ function mcqInsertNormalOptions(anchorRange, question, layout, optionFont, optio
                 mcqApplyFontSafe(midTab, targetFont, targetSize, false, false);
                 mcqInsertOption(paragraph, question.options[j + 1], optionFont, optionSize, targetFont, targetSize, origBold, origItalic, false, useSymbols, isUnicode);
             }
-            if (j + 1 >= 3 || j + 1 === count - 1) {
-                if (j + 1 === 3) mcqInsertNormalAnswer(paragraph, question, mcqResolveAnswer(question), answerSize, origItalic, useSymbols, targetFont, targetSize, isUnicode);
+            if (j + 2 >= count) {
+                mcqInsertNormalAnswer(paragraph, question, mcqResolveAnswer(question), answerSize, origItalic, useSymbols, targetFont, targetSize, isUnicode);
             }
         }
     } else {
@@ -1329,7 +1334,7 @@ function mcqInsertNormalOptions(anchorRange, question, layout, optionFont, optio
             paragraph.alignment = origAlign;
             
             mcqInsertOption(paragraph, question.options[j], optionFont, optionSize, targetFont, targetSize, origBold, origItalic, true, useSymbols, isUnicode);
-            if (j === 3) mcqInsertNormalAnswer(paragraph, question, mcqResolveAnswer(question), answerSize, origItalic, useSymbols, targetFont, targetSize, isUnicode);
+            if (j === count - 1) mcqInsertNormalAnswer(paragraph, question, mcqResolveAnswer(question), answerSize, origItalic, useSymbols, targetFont, targetSize, isUnicode);
         }
     }
 }
@@ -2003,7 +2008,10 @@ function mcqInsertSetOptionsWithAnswer(anchorRange, question, layout, optionFont
             }
 
             if (j + 2 >= count && question.answer) {
-                const ansMarker = useSymbols ? (ANSWER_EXPORT_MAP[question.answer] || question.answer) : getStandardAnswerMarker(question.answer, isUnicode);
+                const normalizedAnswer = mcqResolveAnswer(question);
+                const ansMarker = useSymbols
+                    ? (ANSWER_EXPORT_MAP[normalizedAnswer] || normalizedAnswer)
+                    : (mcqBuildPreservedAnswerText(question, normalizedAnswer) || getStandardAnswerMarker(normalizedAnswer, isUnicode));
                 const tab = p.insertText("\t", "End");
                 mcqApplyFontSafe(tab, targetFont, targetSize, false, false);
                 const ansRange = p.insertText(ansMarker, "End");
@@ -2017,7 +2025,10 @@ function mcqInsertSetOptionsWithAnswer(anchorRange, question, layout, optionFont
             p.alignment = origAlign;
             insertOptionRun(p, question.options[j], true);
             if (j === count - 1 && question.answer) {
-                const ansMarker = useSymbols ? (ANSWER_EXPORT_MAP[question.answer] || question.answer) : getStandardAnswerMarker(question.answer, isUnicode);
+                const normalizedAnswer = mcqResolveAnswer(question);
+                const ansMarker = useSymbols
+                    ? (ANSWER_EXPORT_MAP[normalizedAnswer] || normalizedAnswer)
+                    : (mcqBuildPreservedAnswerText(question, normalizedAnswer) || getStandardAnswerMarker(normalizedAnswer, isUnicode));
                 const tab = p.insertText("\t", "End");
                 mcqApplyFontSafe(tab, targetFont, targetSize, false, false);
                 const ansRange = p.insertText(ansMarker, "End");
