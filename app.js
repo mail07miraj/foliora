@@ -891,6 +891,10 @@ async function runSmartConverter(direction) {
                     matchWildcards: true
                 });
                 latinMatches.load("items/text");
+                await context.sync();
+
+                // Search results are not available until the sync above.
+                // Load each result's font only after the collection exists.
                 for (const match of latinMatches.items) match.font.load("name");
                 await context.sync();
 
