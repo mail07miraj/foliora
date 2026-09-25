@@ -27,7 +27,13 @@ const checks = [
   ["normal MCQ answer is inserted on final option", app.includes("if (j === count - 1) mcqInsertNormalAnswer") && app.includes("if (j + 2 >= count)")],
   ["standard-text answer format is preserved in set generator", app.includes("mcqBuildPreservedAnswerText(question, normalizedAnswer) || getStandardAnswerMarker(normalizedAnswer, isUnicode)")],
   ["embedded Bijoy answer markers are checked only on final option", app.includes("const lastIndex = q.options.length - 1")],
-  ["MCQ answer resolver is present", app.includes("function mcqResolveAnswer(question)")]
+  ["MCQ answer resolver is present", app.includes("function mcqResolveAnswer(question)")],
+  ["MCQ detects unnumbered question before options", app.includes("return mcqIsOptionLine(next);")],
+  ["MCQ detects colon/dash question forms through option lookahead", app.includes("function mcqLooksLikeQuestionStart(line, nextLine)")],
+  ["MCQ preserves source font", app.includes("source?.font?.name") && app.includes("const questionFont = sourceStyle.fontName ||")],
+  ["MCQ options are explicitly non-bold", app.includes("questionFont, questionSize, questionAlign,\n                        false, false")],
+  ["Number & Bold excludes option lines", app.includes("mcqIsOptionLine(current) || mcqIsAnswerLine(current) || mcqIsExplanationLine(current)")],
+  ["Number & Bold supports unnumbered question before options", app.includes("if (mcqLooksLikeQuestionStart(current, next))")],
 ];
 
 let failed = false;
