@@ -1019,9 +1019,37 @@ function sanitizeQuestionAnswers(q) {
     }
 }
 
+function mcqIsOptionLine(line) {
+    return /^\s*\(?[কখগঘA-DK-N]\)?[\.\)\]:：]\s+/.test(String(line || "").trim());
+}
+
+function mcqIsAnswerLine(line) {
+    return /^\s*(?:সঠিক উত্তর|উত্তর|উ|Ans|Answer|mwVK DËi|DËi|D)\s*[:：\.]?/i.test(String(line || "").trim());
+}
+
+function mcqIsExplanationLine(line) {
+    return /^\s*(?:ব্যাখ্যা|Explanation|e¨vL¨v)\s*[:\-–—]/i.test(String(line || "").trim());
+}
+
+function mcqFindNextMeaningfulLine(lines, fromIndex) {
+    for (let i = fromIndex + 1; i < lines.length; i++) {
+        const value = String(lines[i] || "").trim();
+        if (value) return value;
+    }
+    return "";
+}
+
+function mcqLooksLikeQuestionStart(line, nextLine) {
+    const current = String(line || "").trim();
+    const next = String(nextLine || "").trim();
+    if (!current || mcqIsOptionLine(current) || mcqIsAnswerLine(current) || mcqIsExplanationLine(current)) return false;
+    if (/^\s*(?:\d+|[০-৯]+)\s*[\.\)\]]\s*/.test(current)) return true;
+    return mcqIsOptionLine(next);
+}
+
 function parseQuestions(text) {
     let cleanText = String(text || "").replace(/([\r\n\v]+)/g, "\n");
-    let lines = cleanText.split('\n');
+    let lines = cleanText.split("\n");
     let questions = [];
     let current = null;
 
@@ -1034,11 +1062,15 @@ function parseQuestions(text) {
     }
 
     for (let i = 0; i < lines.length; i++) {
-        let line = lines[i].trim();
+        const line = String(lines[i] || "").trim();
         if (!line) continue;
+        const nextLine = mcqFindNextMeaningfulLine(lines, i);
 
         let expMatch = line.match(/^\s*(?:ব্যাখ্যা|Explanation|e¨vL¨v)\s*[: \-\u2013\u2014]\s*(.+)$/i);
-        if (expMatch && current) { current.explanation = expMatch[1].trim(); continue; }
+        if (expMatch && current) {
+            current.explanation = expMatch[1].trim();
+            continue;
+        }
 
         let ansMatch = line.match(/^\s*(?:সঠিক উত্তর|উত্তর|উ|Ans|Answer|mwVK DËi|DËi|D)\s*[:：\.]?\s*(.*)$/i);
         if (ansMatch && current) {
@@ -1052,16 +1084,16 @@ function parseQuestions(text) {
             continue;
         }
 
-        let qMatch = line.match(/^\s*((?:\d+|[০-৯]+))\s*[\. \)\]]\s*(.*)$/);
-        if (qMatch || /^[^\(]+?\?$/.test(line)) {
+        if (mcqLooksLikeQuestionStart(line, nextLine)) {
             flush();
+            let qMatch = line.match(/^\s*((?:\d+|[০-৯]+))\s*[\.\ \)\]]\s*(.*)$/);
             let rawQ = qMatch ? qMatch[2] : line;
-            let optPattern = /([ক-ঘK-N])[\.\) :]\s*(.+?)(?=\s+[ক-ঘK-N][\.\) :]|$)/g;
+            let optPattern = /([ক-ঘK-N])\s*[\.\) :]\s*(.+?)(?=\s+[ক-ঘK-N]\s*[\.\) :]\s*|$)/g;
             let optionsFound = [];
             let questionText = rawQ;
-            
-            let firstOptIndex = rawQ.search(/(?:\s+|^)([ক-ঘK-N])[\.\) :]/);
-            if(firstOptIndex !== -1) {
+            let firstOptIndex = rawQ.search(/(?:\s+|^)([ক-ঘK-N])\s*[\.\) :]\s*/);
+
+            if (firstOptIndex !== -1) {
                 questionText = rawQ.substring(0, firstOptIndex).trim();
                 let optionsPart = rawQ.substring(firstOptIndex).trim();
                 let match;
@@ -1083,7 +1115,8 @@ function parseQuestions(text) {
         }
 
         if (!current) continue;
-        let optPattern = /([ক-ঘK-N])[\.\) :]\s*(.+?)(?=\s+[ক-ঘK-N][\.\) :]|$)/g;
+
+        let optPattern = /([ক-ঘK-N])\s*[\.\) :]\s*(.+?)(?=\s+[ক-ঘK-N]\s*[\.\) :]\s*|$)/g;
         let match;
         let foundInline = false;
         while ((match = optPattern.exec(line)) !== null) {
@@ -1097,16 +1130,32 @@ function parseQuestions(text) {
             current.options.push([normalizeAnswerLabel(singleOptMatch[1]), singleOptMatch[2].trim()]);
             continue;
         }
+
+        // A non-option line followed by another option is a new question.
+        if (current.options.length > 0 && mcqLooksLikeQuestionStart(line, nextLine)) {
+            flush();
+            current = {
+                question: line,
+                questionNumber: null,
+                _sourceLineIndex: i,
+                options: [],
+                answer: null,
+                explanation: null,
+                original_answer: null
+            };
+            continue;
+        }
+
         if (current.options.length > 0) {
             current.options[current.options.length - 1][1] += " " + line;
         } else {
             current.question += " " + line;
         }
     }
+
     flush();
     return questions;
 }
-
 function shuffleOptions(question) {
     if (!question.options || question.options.length < 2 || !question.answer) return question;
     
@@ -1429,78 +1478,166 @@ async function formatSelectedText(type) {
             paragraphs.load("items");
             await context.sync();
 
-            let origAlign = "Left", origBold = false, origItalic = false, originalParagraph = null;
-            if (paragraphs.items.length) {
-                originalParagraph = paragraphs.items[0];
-                originalParagraph.load("alignment, font/bold, font/italic");
-                await context.sync();
-                origAlign = originalParagraph.alignment || "Left";
-                origBold = originalParagraph.font.bold === true;
-                origItalic = originalParagraph.font.italic === true;
+            if (!paragraphs.items.length) {
+                showStatus("Please select some text in the document first!", true);
+                return;
             }
-            
+
+            for (const p of paragraphs.items) {
+                p.load("text, font/name, font/size, font/bold, font/italic, alignment");
+            }
             selection.load("text, font/size");
             await context.sync();
+
             const text = selection.text || "";
             const origSize = Number(selection.font.size) || 10.5;
-            
-            if (!text.trim()) { showStatus("Please select some text in the document first!", true); return; }
-            let tabStops = [];
-            if (originalParagraph) tabStops = await mcqReadSelectedParagraphTabStops(context, originalParagraph);
+            if (!text.trim()) {
+                showStatus("Please select some text in the document first!", true);
+                return;
+            }
+
+            let origAlign = "Left";
+            const originalParagraph = paragraphs.items[0];
+            if (originalParagraph) origAlign = originalParagraph.alignment || "Left";
+
+            const tabStops = originalParagraph
+                ? await mcqReadSelectedParagraphTabStops(context, originalParagraph)
+                : [];
             const columnWidth = await mcqGetCurrentColumnWidth(context);
-            
-            const isUnicode = /[\u0980-\u09FF]/.test(text);
-            const targetFont = isUnicode ? "Kalpurush" : "SutonnyMJ";
-            
+
             let questions = parseQuestions(text);
-            if (!questions.length) { showStatus("No valid questions found in selection!", true); return; }
-            
+            if (!questions.length) {
+                showStatus("No valid questions found in selection!", true);
+                return;
+            }
+
+            let styleSearchIndex = 0;
+            for (const q of questions) {
+                const qText = String(q.question || "").trim();
+                let foundIndex = -1;
+
+                for (let pIndex = styleSearchIndex; pIndex < paragraphs.items.length; pIndex++) {
+                    const sourceText = String(paragraphs.items[pIndex].text || "").trim();
+                    if (qText && sourceText.includes(qText)) {
+                        foundIndex = pIndex;
+                        break;
+                    }
+                }
+
+                if (foundIndex < 0) {
+                    foundIndex = Math.min(
+                        Math.max(Number(q._sourceLineIndex) || 0, 0),
+                        paragraphs.items.length - 1
+                    );
+                }
+
+                const source = paragraphs.items[foundIndex];
+                q.sourceStyle = {
+                    fontName: source?.font?.name || "",
+                    fontSize: Number(source?.font?.size) || origSize,
+                    italic: source?.font?.italic === true,
+                    alignment: source?.alignment || origAlign
+                };
+                styleSearchIndex = Math.max(styleSearchIndex, foundIndex + 1);
+            }
+
             const shuffleElement = document.getElementById("shuffleCheck");
-            if (shuffleElement && shuffleElement.checked) questions = questions.map(q => shuffleOptions(q));
-            
+            if (shuffleElement && shuffleElement.checked) {
+                questions = questions.map(q => shuffleOptions(q));
+            }
+
             const normStyle = document.getElementById("norm-marker-style");
             const smartStyle = document.getElementById("smart-marker-style");
-            const useSymbols = type === "normal" 
-                ? (!normStyle || normStyle.value !== "text") 
+            const useSymbols = type === "normal"
+                ? (!normStyle || normStyle.value !== "text")
                 : (!smartStyle || smartStyle.value !== "text");
 
             const optFontElement = document.getElementById("norm-opt-font");
             const optSizeElement = document.getElementById("norm-opt-size");
             const normalAnswerElement = document.getElementById("norm-ans-size");
             const smartAnswerElement = document.getElementById("smart-ans-size");
-            
-            const optionFont = optFontElement && optFontElement.value.trim() ? optFontElement.value.trim() : "BanglaOMR";
-            const optionSize = optSizeElement && parseFloat(optSizeElement.value) > 0 ? parseFloat(optSizeElement.value) : 9;
-            const normalAnswerSize = normalAnswerElement && parseFloat(normalAnswerElement.value) > 0 ? parseFloat(normalAnswerElement.value) : 10;
-            const smartAnswerSize = smartAnswerElement && parseFloat(smartAnswerElement.value) > 0 ? parseFloat(smartAnswerElement.value) : 10;
-            
+
+            const optionFont = optFontElement && optFontElement.value.trim()
+                ? optFontElement.value.trim() : "BanglaOMR";
+            const optionSize = optSizeElement && parseFloat(optSizeElement.value) > 0
+                ? parseFloat(optSizeElement.value) : 9;
+            const normalAnswerSize = normalAnswerElement && parseFloat(normalAnswerElement.value) > 0
+                ? parseFloat(normalAnswerElement.value) : 10;
+            const smartAnswerSize = smartAnswerElement && parseFloat(smartAnswerElement.value) > 0
+                ? parseFloat(smartAnswerElement.value) : 10;
+
             const anchorRange = selection.insertText(" ", "Replace");
-            
+
             for (let i = 0; i < questions.length; i++) {
                 const q = questions[i];
+                const sourceStyle = q.sourceStyle || {};
+                const questionFont = sourceStyle.fontName || "Arial";
+                const questionSize = Number(sourceStyle.fontSize) || origSize;
+                const questionAlign = sourceStyle.alignment || origAlign;
+                const questionItalic = sourceStyle.italic === true;
                 const safeQuestion = String(q.question || "").replace(/[\r\n\v]/g, " ").trim();
+                const isUnicode = /[\u0980-\u09FF]/.test(safeQuestion);
                 const qNum = isUnicode ? toBanglaNumber(i + 1) : i + 1;
-                
-                const qPara = anchorRange.insertParagraph(`${qNum}. ${safeQuestion}`, "Before");
-                mcqApplyFontSafe(qPara, targetFont, origSize, origBold, origItalic);
-                qPara.alignment = origAlign;
-                
-                const layout = mcqDetectAutoOptionLayout(q.options, tabStops, columnWidth, optionFont, optionSize, targetFont, origSize, origBold, useSymbols, isUnicode);
-                
+
+                const qPara = anchorRange.insertParagraph(qNum + ". " + safeQuestion, "Before");
+                mcqApplyFontSafe(qPara, questionFont, questionSize, true, questionItalic);
+                qPara.alignment = questionAlign;
+
+                const layout = mcqDetectAutoOptionLayout(
+                    q.options,
+                    tabStops,
+                    columnWidth,
+                    optionFont,
+                    optionSize,
+                    questionFont,
+                    questionSize,
+                    false,
+                    useSymbols,
+                    isUnicode
+                );
+
                 if (type === "normal") {
-                    mcqInsertNormalOptions(anchorRange, q, layout, optionFont, optionSize, targetFont, origSize, origAlign, origBold, origItalic, normalAnswerSize, useSymbols, isUnicode);
-                    mcqInsertNormalExplanation(anchorRange, q.explanation, isUnicode, targetFont, origSize, origAlign, origBold, origItalic);
+                    mcqInsertNormalOptions(
+                        anchorRange, q, layout, optionFont, optionSize,
+                        questionFont, questionSize, questionAlign,
+                        false, false, normalAnswerSize, useSymbols, isUnicode
+                    );
+                    mcqInsertNormalExplanation(
+                        anchorRange, q.explanation, isUnicode,
+                        questionFont, questionSize, questionAlign, false, false
+                    );
                 } else if (type === "smart") {
-                    mcqInsertSmartOptions(anchorRange, q, layout, optionFont, optionSize, targetFont, origSize, origAlign, origBold, origItalic, useSymbols, isUnicode);
+                    mcqInsertSmartOptions(
+                        anchorRange, q, layout, optionFont, optionSize,
+                        questionFont, questionSize, questionAlign,
+                        false, false, useSymbols, isUnicode
+                    );
                 }
             }
-            if (type === "smart") mcqInsertSmartAnswerPage(anchorRange, questions, isUnicode, targetFont, origSize, origAlign, origBold, origItalic, smartAnswerSize, useSymbols);
-            
+
+            if (type === "smart") {
+                const smartStyleData = questions[0]?.sourceStyle || {};
+                mcqInsertSmartAnswerPage(
+                    anchorRange,
+                    questions,
+                    /[\u0980-\u09FF]/.test(String(questions[0]?.question || "")),
+                    smartStyleData.fontName || "Arial",
+                    Number(smartStyleData.fontSize) || origSize,
+                    smartStyleData.alignment || origAlign,
+                    true,
+                    smartStyleData.italic === true,
+                    smartAnswerSize,
+                    useSymbols
+                );
+            }
+
             anchorRange.delete();
             await context.sync();
-            showStatus(`${questions.length} MCQs formatted successfully!`);
+            showStatus(String(questions.length) + " MCQs formatted successfully!");
         });
-    } catch (error) { showStatus("Error: " + (error.message || "Unknown error"), true); }
+    } catch (error) {
+        showStatus("Error: " + (error.message || "Unknown error"), true);
+    }
 }
 
 async function formatQuestionsMacro() {
@@ -1510,68 +1647,82 @@ async function formatQuestionsMacro() {
             const paragraphs = selection.paragraphs;
             paragraphs.load("items");
             await context.sync();
-            
-            if (paragraphs.items.length === 0) { showStatus("Please select text first.", true); return; }
-            
-            let numStyle = document.getElementById("num-style").value;
-            let matchingParagraphs = [];
-            for (let i = 0; i < paragraphs.items.length; i++) { paragraphs.items[i].load("text"); }
-            await context.sync();
-            
-            for (let i = 0; i < paragraphs.items.length; i++) {
-                let p = paragraphs.items[i];
-                let text = p.text.trim();
-                if (text.length < 2) continue;
-                if (/^\s*\(?[কখগঘA-D]\)?[\.\)।:]\s+/i.test(text)) continue;
-                if (/^\s*(?:সঠিক উত্তর|উ|উত্তর|Ans|Answer|mwVK DËi|DËi|ব্যাখ্যা|Explanation|e¨vL¨v)/i.test(text)) continue;
-                
-                let hasNumber = /^\s*(?:\d+|[০-৯]+|[a-zA-Z]|[iIvVxXlLcCdDmMoO]+)\s*[\.\)।]/.test(text);
-                let lastChar = text.slice(-1);
-                let endsWithPunctuation = ["?", "؟", "—", "-", ":"].includes(lastChar);
-                
-                if (hasNumber || endsWithPunctuation || text.includes("?")) matchingParagraphs.push(p);
+
+            if (paragraphs.items.length === 0) {
+                showStatus("Please select text first.", true);
+                return;
             }
 
-            if (matchingParagraphs.length === 0) { showStatus("No questions detected.", true); return; }
+            for (const p of paragraphs.items) p.load("text");
+            await context.sync();
+
+            const numStyle = document.getElementById("num-style").value;
+            const items = paragraphs.items.map((p) => ({
+                paragraph: p,
+                text: String(p.text || "").trim()
+            }));
+
+            const matchingParagraphs = [];
+            for (let i = 0; i < items.length; i++) {
+                const current = items[i].text;
+                if (!current) continue;
+                if (mcqIsOptionLine(current) || mcqIsAnswerLine(current) || mcqIsExplanationLine(current)) continue;
+
+                let next = "";
+                for (let j = i + 1; j < items.length; j++) {
+                    if (items[j].text) {
+                        next = items[j].text;
+                        break;
+                    }
+                }
+
+                if (mcqLooksLikeQuestionStart(current, next)) {
+                    matchingParagraphs.push(items[i].paragraph);
+                }
+            }
+
+            if (matchingParagraphs.length === 0) {
+                showStatus("No questions detected.", true);
+                return;
+            }
 
             if (numStyle.startsWith("auto-")) {
                 let list = matchingParagraphs[0].startNewList();
                 list.load("id");
                 await context.sync();
-                
+
                 let listLevelType = Word.ListNumbering.arabic;
                 if (numStyle === "auto-roman") listLevelType = Word.ListNumbering.lowerRoman;
                 if (numStyle === "auto-alpha") listLevelType = Word.ListNumbering.lowerLetter;
-                
                 list.setLevelNumbering(0, listLevelType);
-                
+
                 for (let i = 0; i < matchingParagraphs.length; i++) {
-                    let p = matchingParagraphs[i];
+                    const p = matchingParagraphs[i];
                     p.font.bold = true;
                     if (i > 0) p.attachToList(list.id, 0);
                 }
-                await context.sync();
             } else {
                 let qCount = 0;
-                for (let i = 0; i < matchingParagraphs.length; i++) {
-                    let p = matchingParagraphs[i];
-                    p.font.bold = true; 
-                    
-                    let text = p.text.trim();
-                    let hasNumber = /^\s*(?:\d+|[০-৯]+|[a-zA-Z]|[iIvVxXlLcCdDmMoO]+)\s*[\.\)।]/.test(text);
-                    
+                for (const p of matchingParagraphs) {
+                    p.font.bold = true;
+                    const currentText = String(p.text || "").trim();
+                    const hasNumber = /^\s*(?:\d+|[০-৯]+)\s*[\.\)\]]\s*/.test(currentText);
+
                     if (!hasNumber) {
-                        let numText = getSequenceString(qCount, numStyle);
-                        let numRange = p.insertText(numText, "Start");
+                        const numText = getSequenceString(qCount, numStyle);
+                        const numRange = p.insertText(numText, "Start");
                         numRange.font.bold = true;
                     }
                     qCount++;
                 }
-                await context.sync();
             }
-            showStatus(`Numbered and Bolded ${matchingParagraphs.length} Questions!`);
+
+            await context.sync();
+            showStatus("Numbered and Bolded " + matchingParagraphs.length + " Questions!");
         });
-    } catch (error) { showStatus("Error: " + (error.message || "Unknown"), true); }
+    } catch (error) {
+        showStatus("Error: " + (error.message || "Unknown"), true);
+    }
 }
 
 // ==========================================
