@@ -874,42 +874,92 @@ async function runSmartConverter(direction) {
                     rng.font.italic = origItalic;
                 }
             } else {
-                let protectedEng = [];
-                let protectRegex = /(\([A-Za-z0-9\s\-\.\_]+\)|\[[A-Za-z0-9\s\-\.\_]+\]|"[A-Za-z0-9\s\-\.\_]+"|'[A-Za-z0-9\s\-\.\_]+')/g;
-                let safeText = rawText.replace(protectRegex, function(match) { 
-                    protectedEng.push(match); 
-                    return "▲" + (protectedEng.length - 1) + "▲"; 
+                // Bijoy/ANSI text uses ordinary ASCII code points, so blindly
+                // converting every A-Z/a-z word also converts real English.
+                // Word's source font is the reliable signal: legacy Bijoy
+                // fonts (SutonnyMJ/XMJ/OMJ and similar) are converted; normal
+                // Latin-font text is preserved exactly.
+                const isBijoyFontName = (fontName) => {
+                    const name = String(fontName || "").toLowerCase().replace(/\s+/g, "");
+                    return /sutonny/.test(name) ||
+                           /(?:^|[^a-z])(?:bijoy|boishakhi|adorsho?lipi)(?:$|[^a-z])/.test(name) ||
+                           /(?:xmj|omj|emj)$/.test(name);
+                };
+
+                const latinMatches = selection.search("[A-Za-z][A-Za-z0-9]*", {
+                    matchCase: false,
+                    matchWildcards: true
                 });
+                latinMatches.load("items/text");
+                for (const match of latinMatches.items) match.font.load("name");
+                await context.sync();
+
+                // Protect genuine English runs before converting. Use private
+                // Unicode characters instead of ▲0▲; the old numeric marker
+                // itself was being converted to ০, which is why ▲০▲ remained.
+                const protectedLatin = [];
+                for (const match of latinMatches.items) {
+                    const fontName = match.font?.name || "";
+                    if (!isBijoyFontName(fontName)) {
+                        protectedLatin.push({
+                            token: String.fromCodePoint(0xE000 + protectedLatin.length),
+                            text: match.text,
+                            fontName
+                        });
+                    }
+                }
+
+                let safeText = rawText;
+                for (const item of protectedLatin) {
+                    safeText = safeText.split(item.text).join(item.token);
+                }
 
                 let converted = convertBijoyToUnicode(safeText);
-                let chunkRegex = /([ \t\r\n\v\(\)\[\]\{\}\'\"‘“’”\.\,\:\;\!\?\-\/\$\%\+\=\<\>°_@#&\*\\]+)/g;
-                let textChunks = converted.split(/(▲\d+▲)/g);
+
+                // Restore English exactly. Brackets and other punctuation are
+                // not placeholders, so [ ] / ( ) remain literal characters.
+                for (const item of protectedLatin) {
+                    converted = converted.split(item.token).join(item.text);
+                }
+
+                let chunkRegex = /([ \t\r\n\v\(\)\[\]\{\}\'"‘“’”\.\,\:\;\!\?\-\/\$\%\+\=\<\>°_@#&\*\\]+)/g;
+                let textChunks = converted.split(chunkRegex);
 
                 for (let i = 0; i < textChunks.length; i++) {
-                    let chunk = textChunks[i];
+                    const chunk = textChunks[i];
                     if (!chunk) continue;
-                    
-                    let match = chunk.match(/^▲(\d+)▲$/);
-                    if (match) {
-                        let engText = protectedEng[parseInt(match[1])];
-                        let rng = cursor.insertText(engText, "Before");
-                        rng.font.name = "Times New Roman"; 
-                        rng.font.size = finalFontSize; 
-                        rng.font.bold = origBold; 
-                        rng.font.italic = origItalic;
-                    } else {
-                        let subChunks = chunk.split(chunkRegex);
-                        for (let j = 0; j < subChunks.length; j++) {
-                            let subChunk = subChunks[j];
-                            if (!subChunk) continue;
-                            let rng = cursor.insertText(subChunk, "Before");
-                            if (/[^\s]/.test(subChunk)) { 
-                                rng.font.name = finalFontName; 
-                            }
-                            rng.font.size = finalFontSize; 
-                            rng.font.bold = origBold; 
-                            rng.font.italic = origItalic;
+
+                    // Insert protected English and converted Bijoy portions
+                    // separately so the English font is not overwritten.
+                    let pos = 0;
+                    for (const item of protectedLatin) {
+                        const idx = chunk.indexOf(item.text, pos);
+                        if (idx < 0) continue;
+
+                        const before = chunk.slice(pos, idx);
+                        if (before) {
+                            const beforeRange = cursor.insertText(before, "Before");
+                            if (/[^\s]/.test(before)) beforeRange.font.name = finalFontName;
+                            beforeRange.font.size = finalFontSize;
+                            beforeRange.font.bold = origBold;
+                            beforeRange.font.italic = origItalic;
                         }
+
+                        const engRange = cursor.insertText(item.text, "Before");
+                        engRange.font.name = item.fontName || "Times New Roman";
+                        engRange.font.size = finalFontSize;
+                        engRange.font.bold = origBold;
+                        engRange.font.italic = origItalic;
+                        pos = idx + item.text.length;
+                    }
+
+                    const after = chunk.slice(pos);
+                    if (after) {
+                        const afterRange = cursor.insertText(after, "Before");
+                        if (/[^\s]/.test(after)) afterRange.font.name = finalFontName;
+                        afterRange.font.size = finalFontSize;
+                        afterRange.font.bold = origBold;
+                        afterRange.font.italic = origItalic;
                     }
                 }
             }
