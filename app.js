@@ -1295,6 +1295,136 @@ function mcqDetectAutoOptionLayout(options, tabStops, columnWidth, optionFont, o
     return { mode: allFit ? "two-per-line" : "one-per-line" };
 }
 
+
+function mcqDecodeXmlText(value) {
+    return String(value || "")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&quot;/g, '"')
+        .replace(/&apos;/g, "'")
+        .replace(/&amp;/g, "&");
+}
+
+function mcqExtractTextRunsFromOoxml(ooxml, fallbackStyle = {}) {
+    const xml = String(ooxml || "");
+    const runs = [];
+    const runMatches = xml.match(/<w:r\b[\s\S]*?<\/w:r>/gi) || [];
+
+    for (const run of runMatches) {
+        let text = "";
+        const textMatches = run.match(/<w:t\b[^>]*>[\s\S]*?<\/w:t>/gi) || [];
+        for (const node of textMatches) {
+            text += mcqDecodeXmlText(
+                node.replace(/^<w:t\b[^>]*>/i, "").replace(/<\/w:t>$/i, "")
+            );
+        }
+        if (/<w:tab\b/i.test(run)) text += "\t";
+        if (/<w:br\b/i.test(run)) text += "\n";
+        if (!text) continue;
+
+        const fontInfo = mcqExtractFontFromOoxml(
+            run,
+            fallbackStyle.fontName || fallbackStyle.name || ""
+        );
+        const sizeMatch = run.match(/<w:sz\b[^>]*w:val="(\d+)"/i);
+        const bold = /<w:b(?:\s[^>]*)?\/?\s*>/i.test(run) &&
+            !/<w:b\b[^>]*w:val="(?:0|false|off)"/i.test(run);
+        const italic = /<w:i(?:\s[^>]*)?\/?\s*>/i.test(run) &&
+            !/<w:i\b[^>]*w:val="(?:0|false|off)"/i.test(run);
+
+        runs.push({
+            text,
+            fontName: fontInfo.name || fallbackStyle.fontName || fallbackStyle.name || "",
+            ascii: fontInfo.ascii || fallbackStyle.ascii || "",
+            hAnsi: fontInfo.hAnsi || fallbackStyle.hAnsi || "",
+            cs: fontInfo.cs || fallbackStyle.cs || "",
+            eastAsia: fontInfo.eastAsia || fallbackStyle.eastAsia || "",
+            fontSize: sizeMatch ? Number(sizeMatch[1]) / 2 : Number(fallbackStyle.fontSize) || 0,
+            bold,
+            italic
+        });
+    }
+
+    return runs;
+}
+
+function mcqSliceSourceRuns(runs, targetText) {
+    const sourceRuns = Array.isArray(runs) ? runs : [];
+    const target = String(targetText || "");
+    if (!target || !sourceRuns.length) return [];
+
+    const fullText = sourceRuns.map(run => run.text || "").join("");
+    const start = fullText.indexOf(target);
+    if (start < 0) return [];
+
+    const end = start + target.length;
+    const result = [];
+    let cursor = 0;
+
+    for (const run of sourceRuns) {
+        const runStart = cursor;
+        const runEnd = cursor + run.text.length;
+        cursor = runEnd;
+
+        const overlapStart = Math.max(start, runStart);
+        const overlapEnd = Math.min(end, runEnd);
+        if (overlapEnd <= overlapStart) continue;
+
+        const from = overlapStart - runStart;
+        const to = overlapEnd - runStart;
+        result.push({
+            text: run.text.slice(from, to),
+            fontName: run.fontName,
+            ascii: run.ascii,
+            hAnsi: run.hAnsi,
+            cs: run.cs,
+            eastAsia: run.eastAsia,
+            fontSize: run.fontSize,
+            bold: run.bold,
+            italic: run.italic
+        });
+    }
+
+    return result;
+}
+
+function mcqInsertSourceText(paragraph, text, sourceRuns, fallbackStyle, forceBold, forceItalic, fallbackSize) {
+    const value = String(text || "");
+    if (!value) return;
+
+    const segments = mcqSliceSourceRuns(sourceRuns, value);
+    const list = segments.length ? segments : [{
+        text: value,
+        fontName: fallbackStyle?.fontName || fallbackStyle?.name || "",
+        ascii: fallbackStyle?.ascii || "",
+        hAnsi: fallbackStyle?.hAnsi || "",
+        cs: fallbackStyle?.cs || "",
+        eastAsia: fallbackStyle?.eastAsia || "",
+        fontSize: Number(fallbackStyle?.fontSize) || Number(fallbackSize) || 0,
+        italic: fallbackStyle?.italic === true
+    }];
+
+    for (const segment of list) {
+        if (!segment.text) continue;
+        const range = paragraph.insertText(segment.text, "End");
+        const style = {
+            fontName: segment.fontName || fallbackStyle?.fontName || fallbackStyle?.name || "",
+            ascii: segment.ascii || fallbackStyle?.ascii || "",
+            hAnsi: segment.hAnsi || fallbackStyle?.hAnsi || "",
+            cs: segment.cs || fallbackStyle?.cs || "",
+            eastAsia: segment.eastAsia || fallbackStyle?.eastAsia || "",
+            fontSize: Number(segment.fontSize) || Number(fallbackSize) || Number(fallbackStyle?.fontSize) || 0
+        };
+        mcqApplySourceFontSafe(
+            range,
+            style,
+            style.fontSize,
+            forceBold === true,
+            segment.italic === true ? true : forceItalic === true
+        );
+    }
+}
+
 function mcqExtractFontFromOoxml(ooxml, fallbackFont = "") {
     const xml = String(ooxml || "");
     const runMatches = xml.match(/<w:r\b[\s\S]*?<\/w:r>/gi) || [];
@@ -1380,11 +1510,26 @@ function mcqInsertOption(paragraph, option, optionFont, optionSize, targetFont, 
     if (useSymbols) {
         mcqApplyFontSafe(markerRange, optionFont, optionSize, false, textItalic);
     } else {
-        mcqApplySourceFontSafe(markerRange, sourceStyle, textSize, false, textItalic);
+        const markerSegments = mcqSliceSourceRuns(option._sourceRuns || [], labelText);
+        const markerStyle = markerSegments[0] || sourceStyle;
+        mcqApplySourceFontSafe(
+            markerRange,
+            markerStyle,
+            Number(markerStyle.fontSize) || textSize,
+            false,
+            markerStyle.italic === true || textItalic
+        );
     }
 
-    const textRange = paragraph.insertText(" " + text, "End");
-    mcqApplySourceFontSafe(textRange, sourceStyle, textSize, false, textItalic);
+    mcqInsertSourceText(
+        paragraph,
+        " " + text,
+        option._sourceRuns || [],
+        sourceStyle,
+        false,
+        textItalic,
+        textSize
+    );
 }
 
 function mcqResolveAnswer(question) {
@@ -1407,6 +1552,7 @@ function mcqInsertNormalAnswer(paragraph, question, answer, answerSize, origItal
     if (!normalizedAnswer) return;
 
     const answerSourceStyle = question?.answerStyle || question?.options?.[question.options.length - 1]?._sourceStyle || {};
+    const answerSourceRuns = question?.options?.[question.options.length - 1]?._sourceRuns || [];
     const answerTargetSize = Number(answerSourceStyle.fontSize) || targetSize;
     let marker = "";
     let answerFont = answerSourceStyle.fontName || targetFont;
@@ -1423,6 +1569,19 @@ function mcqInsertNormalAnswer(paragraph, question, answer, answerSize, origItal
     const tabRange = paragraph.insertText("\t", "End");
     mcqApplySourceFontSafe(tabRange, answerSourceStyle, answerTargetSize, false, false);
     const answerRange = paragraph.insertText(marker, "End");
+    if (!useSymbols) {
+        const answerSegments = mcqSliceSourceRuns(answerSourceRuns, marker);
+        if (answerSegments.length) {
+            mcqApplySourceFontSafe(
+                answerRange,
+                answerSegments[0],
+                Number(answerSegments[0].fontSize) || answerTargetSize,
+                false,
+                answerSegments[0].italic === true || origItalic
+            );
+            return;
+        }
+    }
     if (useSymbols) {
         mcqApplyFontSafe(answerRange, answerFont, answerSizeToUse, false, origItalic);
     } else {
@@ -1617,6 +1776,11 @@ async function formatSelectedText(type) {
                     italic: source?.font?.italic === true,
                     alignment: source?.alignment || origAlign
                 };
+                q.sourceRuns = mcqExtractTextRunsFromOoxml(
+                    paragraphOoxml[foundIndex]?.value || "",
+                    q.sourceStyle
+                );
+                q.questionRuns = mcqSliceSourceRuns(q.sourceRuns, qText);
 
                 let optionSearchIndex = foundIndex + 1;
                 for (const option of q.options) {
@@ -1649,6 +1813,10 @@ async function formatSelectedText(type) {
                             fontSize: Number(paragraphs.items[pIndex]?.font?.size) || q.sourceStyle.fontSize,
                             italic: paragraphs.items[pIndex]?.font?.italic === true
                         };
+                        option._sourceRuns = mcqExtractTextRunsFromOoxml(
+                            paragraphOoxml[pIndex]?.value || "",
+                            option._sourceStyle
+                        );
                         optionSearchIndex = pIndex + 1;
                         optionStyleFound = true;
                         break;
@@ -1702,8 +1870,18 @@ async function formatSelectedText(type) {
                 const isUnicode = /[\u0980-\u09FF]/.test(safeQuestion);
                 const qNum = isUnicode ? toBanglaNumber(i + 1) : i + 1;
 
-                const qPara = anchorRange.insertParagraph(qNum + ". " + safeQuestion, "Before");
-                mcqApplySourceFontSafe(qPara, sourceStyle, questionSize, true, questionItalic);
+                const qPara = anchorRange.insertParagraph("", "Before");
+                const numberRange = qPara.insertText(qNum + ". ", "End");
+                mcqApplySourceFontSafe(numberRange, sourceStyle, questionSize, true, questionItalic);
+                mcqInsertSourceText(
+                    qPara,
+                    safeQuestion,
+                    q.questionRuns || q.sourceRuns || [],
+                    sourceStyle,
+                    true,
+                    questionItalic,
+                    questionSize
+                );
                 qPara.alignment = questionAlign;
 
                 const layout = mcqDetectAutoOptionLayout(
