@@ -1295,6 +1295,62 @@ function mcqDetectAutoOptionLayout(options, tabStops, columnWidth, optionFont, o
     return { mode: allFit ? "two-per-line" : "one-per-line" };
 }
 
+function mcqExtractFontFromOoxml(ooxml, fallbackFont = "") {
+    const xml = String(ooxml || "");
+    const runMatches = xml.match(/<w:r\b[\s\S]*?<\/w:r>/gi) || [];
+    for (const run of runMatches) {
+        if (!/<w:t\b/i.test(run)) continue;
+        const fontMatch = run.match(/<w:rFonts\b([^>]*)\/?>/i);
+        if (!fontMatch) continue;
+        const attrs = fontMatch[1] || "";
+        const get = (name) => {
+            const m = attrs.match(new RegExp("w:" + name + '="([^"]+)"', "i"));
+            return m ? m[1] : "";
+        };
+        const ascii = get("ascii");
+        const hAnsi = get("hAnsi");
+        const cs = get("cs");
+        const eastAsia = get("eastAsia");
+        return {
+            name: ascii || hAnsi || cs || eastAsia || fallbackFont || "",
+            ascii: ascii || "",
+            hAnsi: hAnsi || "",
+            cs: cs || "",
+            eastAsia: eastAsia || ""
+        };
+    }
+    const paragraphFont = xml.match(/<w:rFonts\b([^>]*)\/?>/i);
+    if (paragraphFont) {
+        const attrs = paragraphFont[1] || "";
+        for (const name of ["ascii", "hAnsi", "cs", "eastAsia"]) {
+            const m = attrs.match(new RegExp("w:" + name + '="([^"]+)"', "i"));
+            if (m && m[1]) return { name: m[1], ascii: m[1], hAnsi: m[1], cs: m[1], eastAsia: m[1] };
+        }
+    }
+    return { name: fallbackFont || "", ascii: fallbackFont || "", hAnsi: fallbackFont || "", cs: fallbackFont || "", eastAsia: fallbackFont || "" };
+}
+
+function mcqApplySourceFontSafe(range, sourceStyle, fontSize, bold, italic) {
+    const style = sourceStyle || {};
+    const fontName = style.fontName || style.name || "";
+    if (fontName) {
+        range.font.name = fontName;
+        try {
+            if (typeof Office !== "undefined" && Office.context && Office.context.requirements &&
+                Office.context.requirements.isSetSupported &&
+                Office.context.requirements.isSetSupported("WordApiDesktop", "1.3")) {
+                if (style.ascii) range.font.nameAscii = style.ascii;
+                if (style.hAnsi) range.font.nameOther = style.hAnsi;
+                if (style.eastAsia) range.font.nameFarEast = style.eastAsia;
+                if (style.cs) range.font.nameBidirectional = style.cs;
+            }
+        } catch (e) {}
+    }
+    if (fontSize) range.font.size = fontSize;
+    range.font.bold = bold === true;
+    range.font.italic = italic === true;
+}
+
 function mcqApplyFontSafe(range, fontName, fontSize, bold, italic) {
     if (fontName) range.font.name = fontName;
     if (fontSize) range.font.size = fontSize;
@@ -1306,21 +1362,29 @@ function mcqInsertOption(paragraph, option, optionFont, optionSize, targetFont, 
     if (!option) return;
     const labelText = option[0] || "";
     const label = useSymbols ? (OPTION_EXPORT_MAP[labelText] || labelText) : getStandardOptionMarker(labelText, isUnicode);
-    
+    const sourceStyle = option._sourceStyle || {};
+    const textFont = sourceStyle.fontName || targetFont;
+    const textSize = Number(sourceStyle.fontSize) || targetSize;
+    const textItalic = sourceStyle.italic === true;
+
     let text = String(option[1] || "").replace(/[\r\n\v]/g, " ").trim();
     const match = text.match(/\s+([PQRSK-N])\s*$/i);
     if (match) text = text.replace(/\s+([PQRSK-N])\s*$/i, "").trim();
-    
+
     if (leadingTab) {
-        let tabRange = paragraph.insertText("\t", "End");
-        mcqApplyFontSafe(tabRange, targetFont, targetSize, false, false);
+        const tabRange = paragraph.insertText("\t", "End");
+        mcqApplySourceFontSafe(tabRange, sourceStyle, textSize, false, false);
     }
-    
+
     const markerRange = paragraph.insertText(label, "End");
-    mcqApplyFontSafe(markerRange, useSymbols ? optionFont : targetFont, useSymbols ? optionSize : targetSize, origBold, origItalic);
-    
-    const textRange = paragraph.insertText(` ${text}`, "End");
-    mcqApplyFontSafe(textRange, targetFont, targetSize, origBold, origItalic);
+    if (useSymbols) {
+        mcqApplyFontSafe(markerRange, optionFont, optionSize, false, textItalic);
+    } else {
+        mcqApplySourceFontSafe(markerRange, sourceStyle, textSize, false, textItalic);
+    }
+
+    const textRange = paragraph.insertText(" " + text, "End");
+    mcqApplySourceFontSafe(textRange, sourceStyle, textSize, false, textItalic);
 }
 
 function mcqResolveAnswer(question) {
@@ -1342,9 +1406,11 @@ function mcqInsertNormalAnswer(paragraph, question, answer, answerSize, origItal
     const normalizedAnswer = normalizeAnswerLabel(answer);
     if (!normalizedAnswer) return;
 
+    const answerSourceStyle = question?.answerStyle || question?.options?.[question.options.length - 1]?._sourceStyle || {};
+    const answerTargetSize = Number(answerSourceStyle.fontSize) || targetSize;
     let marker = "";
-    let answerFont = targetFont;
-    let answerSizeToUse = targetSize;
+    let answerFont = answerSourceStyle.fontName || targetFont;
+    let answerSizeToUse = answerTargetSize;
 
     if (useSymbols) {
         marker = ANSWER_EXPORT_MAP[normalizedAnswer] || normalizedAnswer;
@@ -1355,9 +1421,13 @@ function mcqInsertNormalAnswer(paragraph, question, answer, answerSize, origItal
     }
 
     const tabRange = paragraph.insertText("\t", "End");
-    mcqApplyFontSafe(tabRange, targetFont, targetSize, false, false);
+    mcqApplySourceFontSafe(tabRange, answerSourceStyle, answerTargetSize, false, false);
     const answerRange = paragraph.insertText(marker, "End");
-    mcqApplyFontSafe(answerRange, answerFont, answerSizeToUse, false, origItalic);
+    if (useSymbols) {
+        mcqApplyFontSafe(answerRange, answerFont, answerSizeToUse, false, origItalic);
+    } else {
+        mcqApplySourceFontSafe(answerRange, answerSourceStyle, answerSizeToUse, false, origItalic);
+    }
 }
 
 function mcqInsertNormalOptions(anchorRange, question, layout, optionFont, optionSize, targetFont, targetSize, origAlign, origBold, origItalic, answerSize, useSymbols, isUnicode) {
@@ -1483,6 +1553,7 @@ async function formatSelectedText(type) {
                 return;
             }
 
+            const paragraphOoxml = paragraphs.items.map(p => p.getOoxml());
             for (const p of paragraphs.items) {
                 p.load("text, font/name, font/size, font/bold, font/italic, alignment");
             }
@@ -1532,12 +1603,64 @@ async function formatSelectedText(type) {
                 }
 
                 const source = paragraphs.items[foundIndex];
+                const sourceFontInfo = mcqExtractFontFromOoxml(
+                    paragraphOoxml[foundIndex]?.value || "",
+                    source?.font?.name || ""
+                );
                 q.sourceStyle = {
-                    fontName: source?.font?.name || "",
+                    fontName: sourceFontInfo.name || source?.font?.name || "",
+                    ascii: sourceFontInfo.ascii || "",
+                    hAnsi: sourceFontInfo.hAnsi || "",
+                    cs: sourceFontInfo.cs || "",
+                    eastAsia: sourceFontInfo.eastAsia || "",
                     fontSize: Number(source?.font?.size) || origSize,
                     italic: source?.font?.italic === true,
                     alignment: source?.alignment || origAlign
                 };
+
+                let optionSearchIndex = foundIndex + 1;
+                for (const option of q.options) {
+                    const optionLabel = normalizeAnswerLabel(option[0]);
+                    let optionStyleFound = false;
+
+                    for (let pIndex = optionSearchIndex; pIndex < paragraphs.items.length; pIndex++) {
+                        const sourceText = String(paragraphs.items[pIndex].text || "").trim();
+                        if (!sourceText) continue;
+
+                        const nextText = mcqFindNextMeaningfulLine(
+                            paragraphs.items.map(p => String(p.text || "")),
+                            pIndex
+                        );
+                        if (pIndex > foundIndex && mcqLooksLikeQuestionStart(sourceText, nextText) && !mcqIsOptionLine(sourceText)) break;
+
+                        const labelMatch = sourceText.match(/^\s*\(?([ক-ঘA-DK-N])\)?\s*[\.\)\]:：]\s*/i);
+                        if (!labelMatch || normalizeAnswerLabel(labelMatch[1]) !== optionLabel) continue;
+
+                        const optFontInfo = mcqExtractFontFromOoxml(
+                            paragraphOoxml[pIndex]?.value || "",
+                            paragraphs.items[pIndex]?.font?.name || q.sourceStyle.fontName
+                        );
+                        option._sourceStyle = {
+                            fontName: optFontInfo.name || paragraphs.items[pIndex]?.font?.name || q.sourceStyle.fontName,
+                            ascii: optFontInfo.ascii || "",
+                            hAnsi: optFontInfo.hAnsi || "",
+                            cs: optFontInfo.cs || "",
+                            eastAsia: optFontInfo.eastAsia || "",
+                            fontSize: Number(paragraphs.items[pIndex]?.font?.size) || q.sourceStyle.fontSize,
+                            italic: paragraphs.items[pIndex]?.font?.italic === true
+                        };
+                        optionSearchIndex = pIndex + 1;
+                        optionStyleFound = true;
+                        break;
+                    }
+
+                    if (!optionStyleFound) option._sourceStyle = {...q.sourceStyle};
+                }
+
+                q.answerStyle = q.options.length
+                    ? {...(q.options[q.options.length - 1]._sourceStyle || q.sourceStyle)}
+                    : {...q.sourceStyle};
+
                 styleSearchIndex = Math.max(styleSearchIndex, foundIndex + 1);
             }
 
@@ -1580,7 +1703,7 @@ async function formatSelectedText(type) {
                 const qNum = isUnicode ? toBanglaNumber(i + 1) : i + 1;
 
                 const qPara = anchorRange.insertParagraph(qNum + ". " + safeQuestion, "Before");
-                mcqApplyFontSafe(qPara, questionFont, questionSize, true, questionItalic);
+                mcqApplySourceFontSafe(qPara, sourceStyle, questionSize, true, questionItalic);
                 qPara.alignment = questionAlign;
 
                 const layout = mcqDetectAutoOptionLayout(
