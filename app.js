@@ -910,6 +910,17 @@ function folioraConvertMixedBijoy(text) {
 
 
     // --------------------------------------------------------
+    safeText = safeText.replace(
+        /\b[A-Za-z]{2,}(?:[-'][A-Za-z]{1,})+\b/g,
+        function(match) {
+            const parts = match.split(/[-']/).filter(Boolean);
+            if (parts.some(function(part) { return folioraLooksLikeEnglishWordV3(part); })) return protect(match);
+            return match;
+        }
+    );
+
+
+
     // STEP 4
     // Protect technical terms / abbreviations
     // --------------------------------------------------------
@@ -924,15 +935,6 @@ function folioraConvertMixedBijoy(text) {
     // STEP 5
     // Protect normal English words
     // --------------------------------------------------------
-
-    safeText = safeText.replace(
-        /\b[A-Za-z]{2,}(?:[-'][A-Za-z]{1,})+\b/g,
-        function(match) {
-            const parts = match.split(/[-']/).filter(Boolean);
-            if (parts.some(function(part) { return folioraLooksLikeEnglishWordV3(part); })) return protect(match);
-            return match;
-        }
-    );
 
     safeText = safeText.replace(/\b\d+(?:[.,]\d+)?\b/g, protect);
 
