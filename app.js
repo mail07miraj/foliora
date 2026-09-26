@@ -1058,7 +1058,179 @@ function folioraLooksLikeEnglishWordV3(word) {
 // ENGLISH PHRASE DETECTOR v3
 // ============================================================
 
+// --- CONVERTER FONT-AWARE LEVELS 1-4 ---
+// Level 1: known legacy/Bijoy font gate.
+// Level 2: inspect actual Word run fonts from OOXML.
+// Level 3: within Bijoy-font runs, preserve English/technical/scientific text
+//          with the existing mixed-content protection engine.
+// Level 4: if a run has no usable font metadata, use the conservative
+//          mixed-content fallback instead of forcing conversion by font alone.
 
+const FOLIORA_BIJOY_FONTS = [
+    "SutonnyMJ",
+    "SutonnyOMJ",
+    "Sutonny",
+    "Bijoy",
+    "BijoyMJ",
+    "Boishakhi",
+    "BanglaBijoy",
+    "Bijoy52"
+];
+
+function folioraNormalizeFontName(name) {
+    return String(name || "")
+        .replace(/^["']|["']$/g, "")
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, "");
+}
+
+function folioraIsBijoyFont(name) {
+    const normalized = folioraNormalizeFontName(name);
+    if (!normalized) return false;
+
+    return FOLIORA_BIJOY_FONTS.some(font =>
+        normalized === folioraNormalizeFontName(font) ||
+        normalized.includes(folioraNormalizeFontName(font))
+    );
+}
+
+function folioraDecodeXmlText(value) {
+    return String(value || "")
+        .replace(/&#x([0-9a-f]+);/gi, (_, hex) => {
+            try { return String.fromCodePoint(parseInt(hex, 16)); } catch (e) { return ""; }
+        })
+        .replace(/&#([0-9]+);/g, (_, dec) => {
+            try { return String.fromCodePoint(parseInt(dec, 10)); } catch (e) { return ""; }
+        })
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&quot;/g, '"')
+        .replace(/&apos;/g, "'")
+        .replace(/&amp;/g, "&");
+}
+
+function folioraExtractRunFont(runXml) {
+    const rPr = String(runXml || "").match(/<w:rPr\b[\s\S]*?<\/w:rPr>/i)?.[0] || "";
+    const attrs = rPr.match(/<w:rFonts\b([^>]*)\/?>(?:<\/w:rFonts>)?/i)?.[1] || "";
+    if (!attrs) return "";
+
+    const preferred = ["w:ascii", "w:hAnsi", "w:cs", "w:eastAsia"];
+    for (const key of preferred) {
+        const match = attrs.match(new RegExp(key.replace(":", "\\:") + '="([^"]+)"', "i"));
+        if (match && match[1]) return folioraDecodeXmlText(match[1]);
+    }
+    return "";
+}
+
+function folioraExtractSelectedRunsFromOoxml(ooxml) {
+    const xml = String(ooxml || "");
+    const paragraphs = [];
+    const pRegex = /<w:p\b[\s\S]*?<\/w:p>/gi;
+    let pMatch;
+
+    while ((pMatch = pRegex.exec(xml)) !== null) {
+        const pXml = pMatch[0];
+        const segments = [];
+        const runRegex = /<w:r\b[\s\S]*?<\/w:r>/gi;
+        let rMatch;
+
+        while ((rMatch = runRegex.exec(pXml)) !== null) {
+            const runXml = rMatch[0];
+            const font = folioraExtractRunFont(runXml);
+            let text = "";
+
+            const textRegex = /<w:t\b[^>]*>([\s\S]*?)<\/w:t>/gi;
+            let tMatch;
+            while ((tMatch = textRegex.exec(runXml)) !== null) {
+                text += folioraDecodeXmlText(tMatch[1]);
+            }
+
+            const tabCount = (runXml.match(/<w:tab\b[^>]*\/?>(?:<\/w:tab>)?/gi) || []).length;
+            if (tabCount) text += "\t".repeat(tabCount);
+
+            const breakCount = (runXml.match(/<w:br\b[^>]*\/?>(?:<\/w:br>)?/gi) || []).length;
+            if (breakCount) text += "\n".repeat(breakCount);
+
+            if (text) segments.push({ text, font });
+        }
+
+        if (segments.length) paragraphs.push(segments);
+    }
+
+    return paragraphs;
+}
+
+function folioraFlattenRunSegments(paragraphs) {
+    const flat = [];
+    paragraphs.forEach((segments, paragraphIndex) => {
+        if (paragraphIndex > 0) {
+            flat.push({ text: "\n", font: "", paragraphBreak: true });
+        }
+        for (const segment of segments) {
+            if (segment && segment.text) flat.push(segment);
+        }
+    });
+    return flat;
+}
+
+function folioraConvertBijoyRunByFont(text, fontName) {
+    if (!text) return [];
+    if (!folioraIsBijoyFont(fontName)) {
+        return [{ text, type: "preserved", font: fontName || "" }];
+    }
+
+    const parts = folioraConvertMixedBijoy(text);
+    return parts.map(part => ({
+        text: part.text,
+        type: part.type === "latin" ? "preserved" : "bangla",
+        font: part.type === "latin" ? (fontName || "") : ""
+    }));
+}
+
+function folioraBuildFontAwareBijoyParts(runSegments, fallbackText) {
+    if (!runSegments.length) {
+        return folioraConvertMixedBijoy(fallbackText).map(part => ({
+            text: part.text,
+            type: part.type === "latin" ? "preserved" : "bangla",
+            font: ""
+        }));
+    }
+
+    const output = [];
+
+    for (const segment of runSegments) {
+        if (!segment || !segment.text) continue;
+
+        if (segment.paragraphBreak) {
+            output.push({ text: "\n", type: "preserved", font: "" });
+            continue;
+        }
+
+        // Level 1 + 2: only known Bijoy-font runs are conversion candidates.
+        if (folioraIsBijoyFont(segment.font)) {
+            output.push(...folioraConvertBijoyRunByFont(segment.text, segment.font));
+            continue;
+        }
+
+        // Level 4: unknown/no font metadata gets the existing conservative
+        // mixed detector. A known non-Bijoy font is never converted.
+        if (!segment.font) {
+            const fallbackParts = folioraConvertMixedBijoy(segment.text);
+            for (const part of fallbackParts) {
+                output.push({
+                    text: part.text,
+                    type: part.type === "latin" ? "preserved" : "bangla",
+                    font: ""
+                });
+            }
+        } else {
+            output.push({ text: segment.text, type: "preserved", font: segment.font });
+        }
+    }
+
+    return output;
+}
 
 // --- CONVERTER HANDLER ---
 async function runSmartConverter(direction) {
@@ -1074,9 +1246,9 @@ async function runSmartConverter(direction) {
             await context.sync();
 
             const rawText = selection.text;
-            if (!rawText || !rawText.trim()) { 
-                showStatus("অনুগ্রহ করে ডকুমেন্টের যে লেখাটুকু কনভার্ট করবেন তা আগে সিলেক্ট করুন!", true); 
-                return; 
+            if (!rawText || !rawText.trim()) {
+                showStatus("অনুগ্রহ করে ডকুমেন্টের যে লেখাটুকু কনভার্ট করবেন তা আগে সিলেক্ট করুন!", true);
+                return;
             }
 
             let origAlign = "Left";
@@ -1086,66 +1258,94 @@ async function runSmartConverter(direction) {
                 origAlign = paras.items[0].alignment || "Left";
             }
 
-            let origBold = selection.font.bold === true;
-            let origItalic = selection.font.italic === true;
-            let origSize = selection.font.size || 10.5;
+            const origBold = selection.font.bold === true;
+            const origItalic = selection.font.italic === true;
+            const origSize = selection.font.size || 10.5;
 
-            let isUnicode = /[\u0980-\u09FF]/.test(rawText);
+            const isUnicode = /[\u0980-\u09FF]/.test(rawText);
             let targetDirection = direction;
             if (isUnicode && direction === "BijoyToUni") targetDirection = "UniToBijoy";
             else if (!isUnicode && direction === "UniToBijoy") targetDirection = "BijoyToUni";
 
-            let prefix = targetDirection === "UniToBijoy" ? "u2b" : "b2u";
-            let fontInput = document.getElementById(`${prefix}-font`);
-            let sizeInput = document.getElementById(`${prefix}-size`);
-            
-            let customFontName = fontInput ? fontInput.value.trim() : "";
-            let customFontSize = sizeInput ? sizeInput.value.trim() : "";
+            const prefix = targetDirection === "UniToBijoy" ? "u2b" : "b2u";
+            const fontInput = document.getElementById(`${prefix}-font`);
+            const sizeInput = document.getElementById(`${prefix}-size`);
 
-            let defaultFont = targetDirection === "UniToBijoy" ? "SutonnyMJ" : "Kalpurush";
-            let finalFontName = customFontName !== "" ? customFontName : defaultFont;
-            let finalFontSize = customFontSize !== "" ? parseFloat(customFontSize) : origSize;
+            const customFontName = fontInput ? fontInput.value.trim() : "";
+            const customFontSize = sizeInput ? sizeInput.value.trim() : "";
 
-            let cursor = selection.insertText("", "Replace");
+            const defaultFont = targetDirection === "UniToBijoy" ? "SutonnyMJ" : "Kalpurush";
+            const finalFontName = customFontName !== "" ? customFontName : defaultFont;
+            const finalFontSize = customFontSize !== "" ? parseFloat(customFontSize) : origSize;
+
+            let runSegments = [];
+            if (targetDirection === "BijoyToUni" && Office.context.requirements.isSetSupported("WordApi", "1.1")) {
+                try {
+                    const selectedOoxml = selection.getOoxml();
+                    await context.sync();
+                    runSegments = folioraFlattenRunSegments(
+                        folioraExtractSelectedRunsFromOoxml(selectedOoxml.value || "")
+                    );
+                } catch (e) {
+                    runSegments = [];
+                }
+            }
+
+            const cursor = selection.insertText("", "Replace");
             cursor.paragraphs.load("items");
             await context.sync();
-            
+
             if (cursor.paragraphs.items.length > 0) {
                 cursor.paragraphs.items[0].alignment = origAlign;
             }
 
             if (targetDirection === "UniToBijoy") {
-                let chunkRegex = /([ \t\r\n\v\(\)\[\]\{\}\'\"‘“’”\.\,\:\;\!\?\-\/\$\%\+\=\<\>°_@#&\*\\a-zA-Z0-9]+)/g;
+                let chunkRegex = /([ \t\r\n\v\(\)\[\]\{\}\'"‘“’”\.\,\:\;\!\?\-\/\$\%\+\=\<\>°_@#&\*\\a-zA-Z0-9]+)/g;
                 let textChunks = rawText.split(chunkRegex);
 
                 for (let i = 0; i < textChunks.length; i++) {
-                    let chunk = textChunks[i];
+                    const chunk = textChunks[i];
                     if (!chunk) continue;
-                    
-                    let rng = cursor.insertText(/[a-zA-Z0-9]/.test(chunk) ? chunk : convertUnicodeToBijoy(chunk), "Before");
-                    if (/[^\s]/.test(chunk)) { 
-                        rng.font.name = /[a-zA-Z0-9]/.test(chunk) ? "Times New Roman" : finalFontName; 
+
+                    const rng = cursor.insertText(
+                        /[a-zA-Z0-9]/.test(chunk) ? chunk : convertUnicodeToBijoy(chunk),
+                        "Before"
+                    );
+
+                    if (/[^\s]/.test(chunk)) {
+                        rng.font.name = /[a-zA-Z0-9]/.test(chunk) ? "Times New Roman" : finalFontName;
                     }
-                    rng.font.size = finalFontSize; 
-                    rng.font.bold = origBold; 
+                    rng.font.size = finalFontSize;
+                    rng.font.bold = origBold;
                     rng.font.italic = origItalic;
                 }
             } else {
-                const mixedParts = folioraConvertMixedBijoy(rawText);
+                const mixedParts = folioraBuildFontAwareBijoyParts(runSegments, rawText);
+
                 for (const part of mixedParts) {
                     if (!part.text) continue;
+
                     const rng = cursor.insertText(part.text, "Before");
-                    if (part.type === "bangla" && /[^\s]/.test(part.text)) rng.font.name = finalFontName;
+
+                    if (/[^\s]/.test(part.text)) {
+                        if (part.type === "bangla") {
+                            rng.font.name = finalFontName;
+                        } else if (part.font) {
+                            rng.font.name = part.font;
+                        }
+                    }
+
                     rng.font.size = finalFontSize;
                     rng.font.bold = origBold;
                     rng.font.italic = origItalic;
                 }
             }
-            await context.sync(); 
+
+            await context.sync();
             showStatus(`সফলভাবে কনভার্ট সম্পন্ন হয়েছে!`);
         });
-    } catch (error) { 
-        showStatus("Error: " + (error.message || "Unknown"), true); 
+    } catch (error) {
+        showStatus("Error: " + (error.message || "Unknown"), true);
     } finally {
         setLoading(btnId, false);
     }
