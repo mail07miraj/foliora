@@ -950,24 +950,6 @@ function folioraConvertMixedBijoy(text) {
 
 
     // --------------------------------------------------------
-    // STEP 6
-    // Protect English phrases
-    // --------------------------------------------------------
-
-    safeText = safeText.replace(
-        /\b[A-Za-z]{2,}(?:\s+[A-Za-z]{2,})+\b/g,
-        function(match) {
-
-            if (folioraLooksLikeEnglishPhraseV3(match)) {
-                return protect(match);
-            }
-
-            return match;
-        }
-    );
-
-
-    // --------------------------------------------------------
     // STEP 7
     // Convert ONLY the remaining Bijoy text
     // --------------------------------------------------------
