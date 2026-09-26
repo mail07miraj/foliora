@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Foliora Admin</title><link rel="stylesheet" href="/admin.css"></head>
+<body>
+<div id="loginView" class="login card">
+<h1>Foliora Admin</h1><p>Administrator sign in</p>
+<form id="loginForm"><div class="field"><label>Email</label><input id="email" type="email" required></div><div class="field"><label>Password</label><input id="password" type="password" required></div><button class="btn primary" style="width:100%">Sign in</button><p id="loginError" class="error"></p></form>
+</div>
+<div id="adminView" class="shell hidden">
+<header class="top"><div class="brand">Foliora <span>Admin</span></div><div><small id="lastSync"></small> <button id="logoutBtn" class="btn">Sign out</button></div></header>
+<main class="content"><div class="stats">
+<div class="card"><div class="stat-label">Total users</div><div id="statTotal" class="stat-value">—</div></div>
+<div class="card"><div class="stat-label">Active MCQ</div><div id="statActive" class="stat-value">—</div></div>
+<div class="card"><div class="stat-label">OCR enabled</div><div id="statOcr" class="stat-value">—</div></div>
+<div class="card"><div class="stat-label">Free / no MCQ</div><div id="statFree" class="stat-value">—</div></div>
+</div>
+<div class="card"><div class="toolbar"><input id="searchInput" class="search" placeholder="Search name or email…"><button id="refreshBtn" class="btn">Refresh</button><span id="adminStatus" class="status"></span></div>
+<div class="table-wrap"><table class="table"><thead><tr><th>User</th><th>MCQ</th><th>Plan</th><th>Expires</th><th>OCR usage</th><th></th></tr></thead><tbody id="userRows"></tbody></table></div></div></main>
+</div>
+<div id="manageModal" class="modal hidden"><div class="modal-box"><div class="modal-head"><h2>Manage subscriber</h2><button id="closeModal">×</button></div>
+<p><strong id="manageName"></strong><br><small id="manageEmail"></small></p>
+<input id="manageUserId" type="hidden">
+<div class="field"><label>MCQ plan</label><select id="planSelect"><option value="pro">Pro</option><option value="free">Free</option></select></div>
+<div class="field"><label>Extend / activate for days</label><input id="daysInput" type="number" min="1" value="30"></div>
+<div class="field"><label>OCR monthly limit</label><input id="ocrLimitInput" type="number" min="0" value="10"></div>
+<div class="actions"><button id="saveSubBtn" class="btn primary">Save subscription</button><button id="resetOcrBtn" class="btn">Reset OCR</button><button id="revokeBtn" class="btn danger">Revoke MCQ</button></div>
+</div></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>window.FOLIORA_SUPABASE_CONFIG={url:"https://dajfssubdipeqnmedwxo.supabase.co",anonKey:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJkYWpmc3N1YmRpcGVxbm1lZHd4byIsInJlZiI6ImRhamZzc3ViZGlwZXFubWVkd3hvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg2MTAxODEsImV4cCI6MjEwNDE4NjE4MX0.cGBFywbbksMXOX-uzhM0obEPDEyC31I64zQ9d-TBwrU"};</script><script src="/admin.js"></script>
+</body></html>
