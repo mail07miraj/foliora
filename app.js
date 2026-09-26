@@ -806,171 +806,106 @@ function convertBijoyToUnicode(text) {
 }
 
 function folioraConvertMixedBijoy(text) {
-
-    if (!text) {
-        return [];
-    }
-
+    if (!text) return [];
     const protectedItems = [];
 
-    // --------------------------------------------------------
-    // SAFE PLACEHOLDER
-    //
-    // IMPORTANT:
-    // Do NOT use A-Z, a-z, 0-9 inside placeholder.
-    // Those characters are valid Bijoy mappings.
-    //
-    // Private Use Area characters are NOT present in
-    // the Bijoy conversion dictionary.
-    // --------------------------------------------------------
-
     function protect(match) {
-
         const index = protectedItems.length;
-
         protectedItems.push(match);
-
-        // PUA characters: \uE000 - \uF8FF
-        // They will survive the Bijoy converter unchanged.
-        return "\uE000" +
-               String.fromCharCode(0xE100 + index) +
-               "\uE001";
+        return "\uE000" + String.fromCharCode(0xE100 + index) + "\uE001";
     }
 
+    function hasStrongBijoyMarker(value) {
+        return /[†‡Ö®©‹«ˆŠšœ˜\x82\x84\x85\x86\x87\x88\x8A]/.test(value || "");
+    }
 
-    // --------------------------------------------------------
-    // STEP 1
-    // Protect bracketed English/text
-    //
-    // Examples:
-    //
-    // (Bangladesh)
-    // [Microsoft Word]
-    // {English Text}
-    // "Business Management"
-    // 'Modern Communication'
-    //
-    // Everything inside these structures remains EXACTLY
-    // unchanged.
-    // --------------------------------------------------------
+    function shouldProtectBracketed(value) {
+        const inner = String(value || "").slice(1, -1);
+        if (/\d/.test(inner)) return true;
+        if (hasStrongBijoyMarker(inner)) return false;
+        const latinWords = inner.match(/\b[A-Za-z]{2,}\b/g) || [];
+        return latinWords.some(folioraLooksLikeEnglishWordV3);
+    }
 
-    let safeText = text;
+    let safeText = String(text);
 
-
-    safeText = safeText.replace(
-        /\([^()\r\n]*\)/g,
-        protect
+    safeText = safeText.replace(/\([^()\r\n]*\)/g, m =>
+        shouldProtectBracketed(m) ? protect(m) : m
+    );
+    safeText = safeText.replace(/\[[^\[\]\r\n]*\]/g, m =>
+        shouldProtectBracketed(m) ? protect(m) : m
+    );
+    safeText = safeText.replace(/\{[^{}\r\n]*\}/g, m =>
+        shouldProtectBracketed(m) ? protect(m) : m
+    );
+    safeText = safeText.replace(/"[^"\r\n]*"/g, m =>
+        shouldProtectBracketed(m) ? protect(m) : m
+    );
+    safeText = safeText.replace(/'[^'\r\n]*'/g, m =>
+        shouldProtectBracketed(m) ? protect(m) : m
     );
 
-
-    safeText = safeText.replace(
-        /\[[^\[\]\r\n]*\]/g,
-        protect
-    );
-
-
-    safeText = safeText.replace(
-        /\{[^{}\r\n]*\}/g,
-        protect
-    );
-
-
-    safeText = safeText.replace(
-        /"[^"\r\n]*"/g,
-        protect
-    );
-
-
-    safeText = safeText.replace(
-        /'[^'\r\n]*'/g,
-        protect
-    );
-
-
-    // --------------------------------------------------------
-    // STEP 2
-    // Protect URLs
-    // --------------------------------------------------------
-
-    safeText = safeText.replace(
-        /(?:https?:\/\/|www\.)[^\s]+/gi,
-        protect
-    );
-
-
-    // --------------------------------------------------------
-    // STEP 3
-    // Protect Email
-    // --------------------------------------------------------
-
+    safeText = safeText.replace(/(?:https?:\/\/|www\.)[^\s]+/gi, protect);
     safeText = safeText.replace(
         /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g,
         protect
     );
 
-
-    // --------------------------------------------------------
     safeText = safeText.replace(
         /\b[A-Za-z]{2,}(?:[-'][A-Za-z]{1,})+\b/g,
         function(match) {
             const parts = match.split(/[-']/).filter(Boolean);
-            if (parts.some(function(part) { return folioraLooksLikeEnglishWordV3(part); })) return protect(match);
-            return match;
+            return parts.some(folioraLooksLikeEnglishWordV3)
+                ? protect(match)
+                : match;
         }
     );
-
-
-
-    // STEP 4
-    // Protect technical terms / abbreviations
-    // --------------------------------------------------------
 
     safeText = safeText.replace(
         /\b(?:AI|API|URL|HTML|CSS|JS|JSON|XML|PDF|DOC|DOCX|XLS|XLSX|PPT|PPTX|GDP|CPU|GPU|RAM|ROM|USB|HTTP|HTTPS|MCQ|FAQ|ISBN|Microsoft|Word|Windows|Office|Google|Chrome|Facebook|YouTube|Excel|PowerPoint|Bangladesh|English|Unicode|Bijoy|SutonnyMJ|Kalpurush)\b/gi,
         protect
     );
 
+    // Preserve scientific/chemical notation such as HSO₄⁻, HCl, H₃O⁺,
+    // H⁺ and H₂SO₄ before Bijoy conversion.
+    safeText = safeText.replace(
+        /(?<![A-Za-z])(?:[A-Z][A-Za-z]*(?:[0-9₀-₉]+|[⁺⁻])(?:[A-Za-z0-9₀-₉⁺⁻]*)|HCl|H3O\+|H2SO4)(?![A-Za-z])/g,
+        protect
+    );
 
-    // --------------------------------------------------------
-    // STEP 5
-    // Protect normal English words
-    // --------------------------------------------------------
+    safeText = safeText.replace(
+        /(?<![A-Za-z])(?:H|OH|Na|K|Cl|Br|I|Ca|Mg|NH4|NO3|SO4|HSO4|CO3|HCO3)[⁺⁻+-](?![A-Za-z])/g,
+        protect
+    );
 
-    safeText = safeText.replace(/\b\d+(?:[.,]\d+)?\b/g, protect);
+    safeText = safeText.replace(/\b\d+(?:[.,]\d+)*\b/g, protect);
 
     safeText = safeText.replace(
         /\b[A-Za-z]{2,}\b/g,
         function(match) {
-
-            if (folioraLooksLikeEnglishWordV3(match)) {
-                return protect(match);
-            }
-
-            return match;
+            return folioraLooksLikeEnglishWordV3(match) ? protect(match) : match;
         }
     );
 
-
-    // --------------------------------------------------------
-    // STEP 7
-    // Convert ONLY the remaining Bijoy text
-    // --------------------------------------------------------
-
-    let converted =
-        convertBijoyToUnicode(safeText);
-
-
+    const converted = convertBijoyToUnicode(safeText);
     const parts = [];
     const placeholderRegex = /\uE000([\uE100-\uF8FF])\uE001/g;
     let lastIndex = 0;
     let match;
+
     while ((match = placeholderRegex.exec(converted)) !== null) {
-        if (match.index > lastIndex) parts.push({ text: converted.slice(lastIndex, match.index), type: "bangla" });
+        if (match.index > lastIndex) {
+            parts.push({ text: converted.slice(lastIndex, match.index), type: "bangla" });
+        }
         const index = match[1].charCodeAt(0) - 0xE100;
         parts.push({ text: protectedItems[index] || "", type: "latin" });
         lastIndex = placeholderRegex.lastIndex;
     }
-    if (lastIndex < converted.length) parts.push({ text: converted.slice(lastIndex), type: "bangla" });
+
+    if (lastIndex < converted.length) {
+        parts.push({ text: converted.slice(lastIndex), type: "bangla" });
+    }
+
     return parts;
 }
 
