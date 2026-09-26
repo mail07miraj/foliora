@@ -718,7 +718,9 @@ function convertUnicodeToBijoy(text) {
 
 function convertBijoyToUnicode(text) {
     if (!text) return "";
-    let str = text.replace(/[\u200B-\u200D\uFEFF\+]/g, "");
+    // Keep literal symbols intact. In particular, "+" is a normal symbol
+    // in mixed text and must never disappear during conversion.
+    let str = text.replace(/[\u200B-\u200D\uFEFF]/g, "");
 
     const b2uJukta = {
         '›U':'ন্ট', 'Þ':'প্ট', '®‹':'ষ্ক', 'é':'ল্ক', 'ê':'ল্গ', 'ì':'ল্ড', 'ë':'ল্ট', 'ð':'শ্চ', '¯‹…':'স্কৃ',
@@ -874,97 +876,87 @@ async function runSmartConverter(direction) {
                     rng.font.italic = origItalic;
                 }
             } else {
-                // Bijoy/ANSI text uses ordinary ASCII code points, so blindly
-                // converting every A-Z/a-z word also converts real English.
-                // Word's source font is the reliable signal: legacy Bijoy
-                // fonts (SutonnyMJ/XMJ/OMJ and similar) are converted; normal
-                // Latin-font text is preserved exactly.
+                // Bijoy/ANSI text and ordinary English both use ASCII code points.
+                // Use the source font to distinguish legacy-Bijoy runs from real
+                // English, then convert only the unprotected portions.
                 const isBijoyFontName = (fontName) => {
                     const name = String(fontName || "").toLowerCase().replace(/\s+/g, "");
                     return /sutonny/.test(name) ||
                            /(?:^|[^a-z])(?:bijoy|boishakhi|adorsho?lipi)(?:$|[^a-z])/.test(name) ||
-                           /(?:xmj|omj|emj)$/.test(name);
+                           /(?:xmj|omj|emj|sjmj|bijoyclassic|bijoyclassicfont)/.test(name);
                 };
 
-                const latinMatches = selection.search("[A-Za-z][A-Za-z0-9]*", {
+                const latinMatches = selection.search("[A-Za-z0-9]{1,}", {
                     matchCase: false,
                     matchWildcards: true
                 });
                 latinMatches.load("items/text");
                 await context.sync();
 
-                // Search results are not available until the sync above.
-                // Load each result's font only after the collection exists.
                 for (const match of latinMatches.items) match.font.load("name");
                 await context.sync();
 
-                // Protect genuine English runs before converting. Use private
-                // Unicode characters instead of ▲0▲; the old numeric marker
-                // itself was being converted to ০, which is why ▲০▲ remained.
-                const protectedLatin = [];
+                // Keep exact occurrence positions so repeated English words do not
+                // cause a global split/join replacement.
+                const protectedSpans = [];
+                let scanFrom = 0;
+
                 for (const match of latinMatches.items) {
-                    const fontName = match.font?.name || "";
-                    if (!isBijoyFontName(fontName)) {
-                        protectedLatin.push({
-                            token: String.fromCodePoint(0xE000 + protectedLatin.length),
-                            text: match.text,
-                            fontName
+                    const matchText = String(match.text || "");
+                    if (!matchText) continue;
+
+                    const matchIndex = rawText.indexOf(matchText, scanFrom);
+                    if (matchIndex < 0) continue;
+
+                    const sourceFont = String(match.font?.name || "");
+                    const isNumberOnly = /^[0-9]+$/.test(matchText);
+                    if (isNumberOnly || !isBijoyFontName(sourceFont)) {
+                        protectedSpans.push({
+                            start: matchIndex,
+                            end: matchIndex + matchText.length,
+                            text: matchText,
+                            fontName: sourceFont
                         });
                     }
+                    scanFrom = matchIndex + matchText.length;
                 }
 
-                let safeText = rawText;
-                for (const item of protectedLatin) {
-                    safeText = safeText.split(item.text).join(item.token);
+                let outputParts = [];
+                let cursorPos = 0;
+
+                const pushConverted = (textPart) => {
+                    if (!textPart) return;
+                    outputParts.push({
+                        type: "converted",
+                        text: convertBijoyToUnicode(textPart)
+                    });
+                };
+
+                for (const span of protectedSpans) {
+                    if (span.start < cursorPos) continue;
+                    pushConverted(rawText.slice(cursorPos, span.start));
+                    outputParts.push({
+                        type: "protected",
+                        text: span.text,
+                        fontName: span.fontName
+                    });
+                    cursorPos = span.end;
                 }
+                pushConverted(rawText.slice(cursorPos));
 
-                let converted = convertBijoyToUnicode(safeText);
+                for (const part of outputParts) {
+                    if (!part.text) continue;
+                    const rng = cursor.insertText(part.text, "Before");
 
-                // Restore English exactly. Brackets and other punctuation are
-                // not placeholders, so [ ] / ( ) remain literal characters.
-                for (const item of protectedLatin) {
-                    converted = converted.split(item.token).join(item.text);
-                }
-
-                let chunkRegex = /([ \t\r\n\v\(\)\[\]\{\}\'"‘“’”\.\,\:\;\!\?\-\/\$\%\+\=\<\>°_@#&\*\\]+)/g;
-                let textChunks = converted.split(chunkRegex);
-
-                for (let i = 0; i < textChunks.length; i++) {
-                    const chunk = textChunks[i];
-                    if (!chunk) continue;
-
-                    // Insert protected English and converted Bijoy portions
-                    // separately so the English font is not overwritten.
-                    let pos = 0;
-                    for (const item of protectedLatin) {
-                        const idx = chunk.indexOf(item.text, pos);
-                        if (idx < 0) continue;
-
-                        const before = chunk.slice(pos, idx);
-                        if (before) {
-                            const beforeRange = cursor.insertText(before, "Before");
-                            if (/[^\s]/.test(before)) beforeRange.font.name = finalFontName;
-                            beforeRange.font.size = finalFontSize;
-                            beforeRange.font.bold = origBold;
-                            beforeRange.font.italic = origItalic;
-                        }
-
-                        const engRange = cursor.insertText(item.text, "Before");
-                        engRange.font.name = item.fontName || "Times New Roman";
-                        engRange.font.size = finalFontSize;
-                        engRange.font.bold = origBold;
-                        engRange.font.italic = origItalic;
-                        pos = idx + item.text.length;
+                    if (part.type === "protected") {
+                        if (part.fontName) rng.font.name = part.fontName;
+                    } else if (/[^\s]/.test(part.text)) {
+                        rng.font.name = finalFontName;
                     }
 
-                    const after = chunk.slice(pos);
-                    if (after) {
-                        const afterRange = cursor.insertText(after, "Before");
-                        if (/[^\s]/.test(after)) afterRange.font.name = finalFontName;
-                        afterRange.font.size = finalFontSize;
-                        afterRange.font.bold = origBold;
-                        afterRange.font.italic = origItalic;
-                    }
+                    rng.font.size = finalFontSize;
+                    rng.font.bold = origBold;
+                    rng.font.italic = origItalic;
                 }
             }
             await context.sync(); 
