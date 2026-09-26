@@ -1126,7 +1126,6 @@ function folioraLooksLikeEnglishWordV3(word) {
 
 
 // --- CONVERTER HANDLER ---
-// mixed-text converter
 async function runSmartConverter(direction) {
     const btnId = direction === "UniToBijoy" ? "btnUniToBijoy" : "btnBijoyToUni";
     setLoading(btnId, true);
