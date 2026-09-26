@@ -909,14 +909,28 @@ async function runSmartConverter(direction) {
                     if (matchIndex < 0) continue;
 
                     const sourceFont = String(match.font?.name || "");
-                    const isNumberOnly = /^[0-9]+$/.test(matchText);
-                    if (isNumberOnly || !isBijoyFontName(sourceFont)) {
+                    if (!isBijoyFontName(sourceFont)) {
                         protectedSpans.push({
                             start: matchIndex,
                             end: matchIndex + matchText.length,
                             text: matchText,
                             fontName: sourceFont
                         });
+                    } else {
+                        // A Bijoy-font run can contain an inline number such as
+                        // "evsjv2025". Keep the numeric portion unchanged even
+                        // though the surrounding legacy text must be converted.
+                        const numberPattern = /[0-9]+/g;
+                        let numberMatch;
+                        while ((numberMatch = numberPattern.exec(matchText)) !== null) {
+                            const numberStart = matchIndex + numberMatch.index;
+                            protectedSpans.push({
+                                start: numberStart,
+                                end: numberStart + numberMatch[0].length,
+                                text: numberMatch[0],
+                                fontName: sourceFont
+                            });
+                        }
                     }
                     scanFrom = matchIndex + matchText.length;
                 }
