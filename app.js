@@ -805,6 +805,342 @@ function convertBijoyToUnicode(text) {
     return str.normalize("NFC");
 }
 
+function folioraConvertMixedBijoy(text) {
+
+    if (!text) {
+        return [];
+    }
+
+    const protectedItems = [];
+
+    // --------------------------------------------------------
+    // SAFE PLACEHOLDER
+    //
+    // IMPORTANT:
+    // Do NOT use A-Z, a-z, 0-9 inside placeholder.
+    // Those characters are valid Bijoy mappings.
+    //
+    // Private Use Area characters are NOT present in
+    // the Bijoy conversion dictionary.
+    // --------------------------------------------------------
+
+    function protect(match) {
+
+        const index = protectedItems.length;
+
+        protectedItems.push(match);
+
+        // PUA characters: \uE000 - \uF8FF
+        // They will survive the Bijoy converter unchanged.
+        return "\uE000" +
+               String.fromCharCode(0xE100 + index) +
+               "\uE001";
+    }
+
+
+    // --------------------------------------------------------
+    // STEP 1
+    // Protect bracketed English/text
+    //
+    // Examples:
+    //
+    // (Bangladesh)
+    // [Microsoft Word]
+    // {English Text}
+    // "Business Management"
+    // 'Modern Communication'
+    //
+    // Everything inside these structures remains EXACTLY
+    // unchanged.
+    // --------------------------------------------------------
+
+    let safeText = text;
+
+
+    safeText = safeText.replace(
+        /\([^()\r\n]*\)/g,
+        protect
+    );
+
+
+    safeText = safeText.replace(
+        /\[[^\[\]\r\n]*\]/g,
+        protect
+    );
+
+
+    safeText = safeText.replace(
+        /\{[^{}\r\n]*\}/g,
+        protect
+    );
+
+
+    safeText = safeText.replace(
+        /"[^"\r\n]*"/g,
+        protect
+    );
+
+
+    safeText = safeText.replace(
+        /'[^'\r\n]*'/g,
+        protect
+    );
+
+
+    // --------------------------------------------------------
+    // STEP 2
+    // Protect URLs
+    // --------------------------------------------------------
+
+    safeText = safeText.replace(
+        /(?:https?:\/\/|www\.)[^\s]+/gi,
+        protect
+    );
+
+
+    // --------------------------------------------------------
+    // STEP 3
+    // Protect Email
+    // --------------------------------------------------------
+
+    safeText = safeText.replace(
+        /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g,
+        protect
+    );
+
+
+    // --------------------------------------------------------
+    // STEP 4
+    // Protect technical terms / abbreviations
+    // --------------------------------------------------------
+
+    safeText = safeText.replace(
+        /\b(?:AI|API|URL|HTML|CSS|JS|JSON|XML|PDF|DOC|DOCX|XLS|XLSX|PPT|PPTX|GDP|CPU|GPU|RAM|ROM|USB|HTTP|HTTPS|MCQ|FAQ|ISBN|Microsoft|Word|Windows|Office|Google|Chrome|Facebook|YouTube|Excel|PowerPoint|Bangladesh|English|Unicode|Bijoy|SutonnyMJ|Kalpurush)\b/gi,
+        protect
+    );
+
+
+    // --------------------------------------------------------
+    // STEP 5
+    // Protect normal English words
+    // --------------------------------------------------------
+
+    safeText = safeText.replace(
+        /\b[A-Za-z]{2,}(?:[-'][A-Za-z]{1,})+\b/g,
+        function(match) {
+            const parts = match.split(/[-']/).filter(Boolean);
+            if (parts.some(function(part) { return folioraLooksLikeEnglishWordV3(part); })) return protect(match);
+            return match;
+        }
+    );
+
+    safeText = safeText.replace(/\b\d+(?:[.,]\d+)?\b/g, protect);
+
+    safeText = safeText.replace(
+        /\b[A-Za-z]{2,}\b/g,
+        function(match) {
+
+            if (folioraLooksLikeEnglishWordV3(match)) {
+                return protect(match);
+            }
+
+            return match;
+        }
+    );
+
+
+    // --------------------------------------------------------
+    // STEP 6
+    // Protect English phrases
+    // --------------------------------------------------------
+
+    safeText = safeText.replace(
+        /\b[A-Za-z]{2,}(?:\s+[A-Za-z]{2,})+\b/g,
+        function(match) {
+
+            if (folioraLooksLikeEnglishPhraseV3(match)) {
+                return protect(match);
+            }
+
+            return match;
+        }
+    );
+
+
+    // --------------------------------------------------------
+    // STEP 7
+    // Convert ONLY the remaining Bijoy text
+    // --------------------------------------------------------
+
+    let converted =
+        convertBijoyToUnicode(safeText);
+
+
+    const parts = [];
+    const placeholderRegex = /\uE000([\uE100-\uF8FF])\uE001/g;
+    let lastIndex = 0;
+    let match;
+    while ((match = placeholderRegex.exec(converted)) !== null) {
+        if (match.index > lastIndex) parts.push({ text: converted.slice(lastIndex, match.index), type: "bangla" });
+        const index = match[1].charCodeAt(0) - 0xE100;
+        parts.push({ text: protectedItems[index] || "", type: "latin" });
+        lastIndex = placeholderRegex.lastIndex;
+    }
+    if (lastIndex < converted.length) parts.push({ text: converted.slice(lastIndex), type: "bangla" });
+    return parts;
+}
+
+function folioraLooksLikeEnglishWordV3(word) {
+
+    if (!word) {
+        return false;
+    }
+
+
+    const lower =
+        word.toLowerCase();
+
+
+    // --------------------------------------------------------
+    // Strong common English words
+    // --------------------------------------------------------
+
+    const commonEnglish = new Set([
+        "actual","live","runtime","conversion","convert","converted","text","english",
+        "code","path","syntax","mapping","logic","protected","span","same","exact",
+        "exactly","unchanged","use","using","used","keep","here","there","now",
+        "can","cannot","could","would","should","will","real","current","source",
+
+        "a",
+        "an",
+        "the",
+
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "being",
+
+        "and",
+        "or",
+        "but",
+        "if",
+        "then",
+        "than",
+
+        "of",
+        "in",
+        "on",
+        "at",
+        "to",
+        "for",
+        "from",
+        "with",
+        "by",
+
+        "this",
+        "that",
+        "these",
+        "those",
+
+        "what",
+        "which",
+        "who",
+        "when",
+        "where",
+        "why",
+        "how",
+
+        "business",
+        "management",
+        "marketing",
+        "finance",
+        "accounting",
+
+        "communication",
+        "system",
+        "modern",
+        "technology",
+
+        "company",
+        "bank",
+        "government",
+        "country",
+
+        "word",
+        "document",
+        "file",
+        "format",
+
+        "question",
+        "answer",
+        "option",
+        "chapter",
+
+        "correct",
+        "incorrect",
+
+        "test",
+        "example",
+        "total",
+
+        "true",
+        "false",
+        "yes",
+        "no"
+    ]);
+
+
+    if (commonEnglish.has(lower)) {
+        return true;
+    }
+
+
+    // --------------------------------------------------------
+    // Strong English characteristics
+    // --------------------------------------------------------
+
+    const hasVowel =
+        /[aeiou]/i.test(word);
+
+    const hasCommonEnglishPattern =
+        /(?:tion|sion|ment|ness|ing|ed|er|ly|ity|able|ible|ous|ive|al|ful|less)$/i
+            .test(word);
+
+
+    if (
+        hasVowel &&
+        hasCommonEnglishPattern
+    ) {
+        return true;
+    }
+
+
+    /*
+     * Do NOT classify obvious Bijoy sequences as English.
+     */
+
+    if (
+        /^[evwgKMLNPQRSUTWXYZa-z]+$/.test(word) &&
+        word.length <= 8
+    ) {
+        return false;
+    }
+
+
+    return false;
+}
+
+
+
+// ============================================================
+// ENGLISH PHRASE DETECTOR v3
+// ============================================================
+
+
+
 // --- CONVERTER HANDLER ---
 // mixed-text converter
 async function runSmartConverter(direction) {
@@ -877,98 +1213,11 @@ async function runSmartConverter(direction) {
                     rng.font.italic = origItalic;
                 }
             } else {
-                // Bijoy/ANSI text and ordinary English both use ASCII code points.
-                // Use the source font to distinguish legacy-Bijoy runs from real
-                // English, then convert only the unprotected portions.
-                const isBijoyFontName = (fontName) => {
-                    const name = String(fontName || "").toLowerCase().replace(/\s+/g, "");
-                    return /sutonny/.test(name) ||
-                           /(?:^|[^a-z])(?:bijoy|boishakhi|adorsho?lipi)(?:$|[^a-z])/.test(name) ||
-                           /(?:xmj|omj|emj|sjmj|bijoyclassic|bijoyclassicfont)/.test(name);
-                };
-
-                const latinMatches = selection.search("[A-Za-z0-9]{1,}", {
-                    matchCase: false,
-                    matchWildcards: true
-                });
-                latinMatches.load("items/text");
-                await context.sync();
-
-                for (const match of latinMatches.items) match.font.load("name");
-                await context.sync();
-
-                // Keep exact occurrence positions so repeated English words do not
-                // cause a global split/join replacement.
-                const protectedSpans = [];
-                let scanFrom = 0;
-
-                for (const match of latinMatches.items) {
-                    const matchText = String(match.text || "");
-                    if (!matchText) continue;
-
-                    const matchIndex = rawText.indexOf(matchText, scanFrom);
-                    if (matchIndex < 0) continue;
-
-                    const sourceFont = String(match.font?.name || "");
-                    if (!isBijoyFontName(sourceFont)) {
-                        protectedSpans.push({
-                            start: matchIndex,
-                            end: matchIndex + matchText.length,
-                            text: matchText,
-                            fontName: sourceFont
-                        });
-                    } else {
-                        // A Bijoy-font run can contain an inline number such as
-                        // "evsjv2025". Keep the numeric portion unchanged even
-                        // though the surrounding legacy text must be converted.
-                        const numberPattern = /[0-9]+/g;
-                        let numberMatch;
-                        while ((numberMatch = numberPattern.exec(matchText)) !== null) {
-                            const numberStart = matchIndex + numberMatch.index;
-                            protectedSpans.push({
-                                start: numberStart,
-                                end: numberStart + numberMatch[0].length,
-                                text: numberMatch[0],
-                                fontName: sourceFont
-                            });
-                        }
-                    }
-                    scanFrom = matchIndex + matchText.length;
-                }
-
-                let outputParts = [];
-                let cursorPos = 0;
-
-                const pushConverted = (textPart) => {
-                    if (!textPart) return;
-                    outputParts.push({
-                        type: "converted",
-                        text: convertBijoyToUnicode(textPart)
-                    });
-                };
-
-                for (const span of protectedSpans) {
-                    if (span.start < cursorPos) continue;
-                    pushConverted(rawText.slice(cursorPos, span.start));
-                    outputParts.push({
-                        type: "protected",
-                        text: span.text,
-                        fontName: span.fontName
-                    });
-                    cursorPos = span.end;
-                }
-                pushConverted(rawText.slice(cursorPos));
-
-                for (const part of outputParts) {
+                const mixedParts = folioraConvertMixedBijoy(rawText);
+                for (const part of mixedParts) {
                     if (!part.text) continue;
                     const rng = cursor.insertText(part.text, "Before");
-
-                    if (part.type === "protected") {
-                        if (part.fontName) rng.font.name = part.fontName;
-                    } else if (/[^\s]/.test(part.text)) {
-                        rng.font.name = finalFontName;
-                    }
-
+                    if (part.type === "bangla" && /[^\s]/.test(part.text)) rng.font.name = finalFontName;
                     rng.font.size = finalFontSize;
                     rng.font.bold = origBold;
                     rng.font.italic = origItalic;
