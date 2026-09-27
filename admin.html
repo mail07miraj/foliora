@@ -54,15 +54,6 @@
 
       <div class="side-stack">
         <div class="card panel">
-          <div class="panel-head"><div><h2>Quick Overview</h2><p>Current subscriber mix.</p></div></div>
-          <div class="meter-row"><span>MCQ Pro</span><strong id="overviewPro">0</strong></div>
-          <div class="meter"><span id="overviewProBar"></span></div>
-          <div class="meter-row"><span>OCR enabled</span><strong id="overviewOcr">0</strong></div>
-          <div class="meter"><span id="overviewOcrBar"></span></div>
-          <div class="meter-row"><span>Active MCQ</span><strong id="overviewActive">0</strong></div>
-          <div class="meter"><span id="overviewActiveBar"></span></div>
-        </div>
-        <div class="card panel">
           <div class="panel-head"><div><h2>Quick Filters</h2><p>Jump to a user segment.</p></div></div>
           <div class="quick-filter-box">
             <label for="quickFilter">Filter users</label>
@@ -75,6 +66,33 @@
             </select>
           </div>
         </div>
+        <div class="card panel">
+          <div class="panel-head"><div><h2>Quick Overview</h2><p>Current subscriber mix.</p></div></div>
+          <div class="meter-row"><span>MCQ Pro</span><strong id="overviewPro">0</strong></div>
+          <div class="meter"><span id="overviewProBar"></span></div>
+          <div class="meter-row"><span>OCR enabled</span><strong id="overviewOcr">0</strong></div>
+          <div class="meter"><span id="overviewOcrBar"></span></div>
+          <div class="meter-row"><span>Active MCQ</span><strong id="overviewActive">0</strong></div>
+          <div class="meter"><span id="overviewActiveBar"></span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="analytics-grid">
+      <div class="card panel analytics-main">
+        <div class="panel-head"><div><h2>Analytics & Activity</h2><p>Live metrics calculated from the current user, entitlement and quota records.</p></div><span id="analyticsStatus" class="status"></span></div>
+        <div class="analytics-cards">
+          <div class="mini-stat"><span>New users · 7 days</span><strong id="newUsers7">0</strong></div>
+          <div class="mini-stat"><span>Expiring · 7 days</span><strong id="expiring7">0</strong></div>
+          <div class="mini-stat"><span>Expired MCQ</span><strong id="expiredCount">0</strong></div>
+          <div class="mini-stat"><span>OCR used this month</span><strong id="ocrUsedAnalytics">0</strong></div>
+        </div>
+        <div class="section-subhead"><strong>Recent registrations</strong><span>Latest 5 accounts</span></div>
+        <div class="recent-list" id="recentRegistrations"></div>
+      </div>
+      <div class="card panel analytics-side">
+        <div class="panel-head"><div><h2>Recent activity</h2><p>Latest known sign-ins.</p></div></div>
+        <div class="recent-list" id="recentActivity"></div>
       </div>
     </section>
   </main>
