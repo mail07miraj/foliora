@@ -16,6 +16,26 @@ async function verifyAdmin(token){
   const allow=(process.env.FOLIORA_ADMIN_EMAILS||"").split(",").map(x=>x.trim().toLowerCase()).filter(Boolean);
   return u?.id&&u.email&&allow.includes(u.email.toLowerCase())?u:null;
 }
+async function authUser(userId){
+  const url=process.env.SUPABASE_URL, key=process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const r=await fetch(url+"/auth/v1/admin/users/"+encodeURIComponent(userId),{headers:{apikey:key,Authorization:"Bearer "+key}});
+  const data=await r.json().catch(()=>null);
+  if(!r.ok||!data?.id) throw new Error(data?.msg||"Could not load the selected user.");
+  return data;
+}
+async function ensurePublicUser(user){
+  const fullName=String(user.user_metadata?.full_name||user.email?.split("@")[0]||"User").trim()||"User";
+  await supa("users?on_conflict=id",{
+    method:"POST",
+    prefer:"resolution=merge-duplicates,return=representation",
+    body:JSON.stringify({
+      id:user.id,
+      email:user.email||"",
+      full_name:fullName,
+      is_active:true
+    })
+  });
+}
 function month(){return new Date().toISOString().slice(0,7);}
 module.exports=async function(req,res){
   if(req.method!=="POST")return json(res,405,{error:"Method not allowed."});
@@ -24,10 +44,15 @@ module.exports=async function(req,res){
     const admin=await verifyAdmin(auth.slice(7).trim()); if(!admin)return json(res,403,{error:"Administrator access denied."});
     const body=req.body&&typeof req.body==="object"?req.body:await new Promise((resolve,reject)=>{let s="";req.on("data",c=>s+=c);req.on("end",()=>{try{resolve(JSON.parse(s||"{}"))}catch(e){reject(e)}})});
     const action=body.action;
+
     if(action==="list_users"){
       const r=await fetch(process.env.SUPABASE_URL+"/auth/v1/admin/users?per_page="+MAX_USERS,{headers:{apikey:process.env.SUPABASE_SERVICE_ROLE_KEY,Authorization:"Bearer "+process.env.SUPABASE_SERVICE_ROLE_KEY}});
       const authData=await r.json(); if(!r.ok)throw new Error(authData?.msg||"Could not load users.");
       const users=authData.users||[];
+
+      // Keep the application's public.users table synchronized with Supabase Auth.
+      for(const u of users) await ensurePublicUser(u);
+
       const ids=users.map(u=>u.id);
       let ents=[], quotas=[];
       if(ids.length){
@@ -41,25 +66,38 @@ module.exports=async function(req,res){
       });
       return json(res,200,{users:result});
     }
+
     if(action==="set_subscription"){
-      const userId=String(body.userId||""); const plan=body.plan==="free"?"free":"pro"; const days=Math.min(3650,Math.max(1,Number(body.days||30))); const ocrLimit=Math.min(100000,Math.max(0,Number(body.ocrLimit||0)));
+      const userId=String(body.userId||"");
+      const plan=body.plan==="free"?"free":"pro";
+      const days=Math.min(3650,Math.max(1,Number(body.days||30)));
+      const ocrLimit=Math.min(100000,Math.max(0,Number(body.ocrLimit||0)));
       if(!/^[0-9a-f-]{20,}$/i.test(userId))return json(res,400,{error:"Invalid user id."});
+
+      // The entitlements table references public.users.id, so make sure
+      // the selected Auth user exists in public.users before writing entitlements.
+      const user=await authUser(userId);
+      await ensurePublicUser(user);
+
       const validUntil=new Date(Date.now()+days*86400000).toISOString();
       await supa("entitlements?on_conflict=user_id,product_id",{method:"POST",prefer:"resolution=merge-duplicates,return=representation",body:JSON.stringify({user_id:userId,product_id:"foliora-mcq",tier:plan,is_active:plan==="pro",valid_until:validUntil})});
       await supa("entitlements?on_conflict=user_id,product_id",{method:"POST",prefer:"resolution=merge-duplicates,return=representation",body:JSON.stringify({user_id:userId,product_id:"foliora-ocr",tier:"free",is_active:true,valid_until:validUntil})});
       await supa("usage_quotas?on_conflict=user_id,product_id,billing_cycle_month",{method:"POST",prefer:"resolution=merge-duplicates,return=representation",body:JSON.stringify({user_id:userId,product_id:"foliora-ocr",used_units:0,unit_limit:ocrLimit,billing_cycle_month:month()})});
       return json(res,200,{ok:true});
     }
+
     if(action==="revoke_subscription"){
       const userId=String(body.userId||""); if(!userId)return json(res,400,{error:"Invalid user id."});
       await supa("entitlements?user_id=eq."+encodeURIComponent(userId)+"&product_id=eq.foliora-mcq",{method:"PATCH",body:JSON.stringify({is_active:false})});
       return json(res,200,{ok:true});
     }
+
     if(action==="reset_ocr"){
       const userId=String(body.userId||""); if(!userId)return json(res,400,{error:"Invalid user id."});
       await supa("usage_quotas?user_id=eq."+encodeURIComponent(userId)+"&product_id=eq.foliora-ocr&billing_cycle_month=eq."+month(),{method:"PATCH",body:JSON.stringify({used_units:0})});
       return json(res,200,{ok:true});
     }
+
     return json(res,400,{error:"Unknown admin action."});
   }catch(e){return json(res,500,{error:e.message||"Admin server error."});}
 };
