@@ -60,20 +60,20 @@ async function ensurePublicUser(user){
     body:JSON.stringify({
       id:user.id,
       email:user.email||"",
-      full_name:fullName,
-      is_active:true
+      full_name:fullName
     })
   });
 }
 
 async function getUserData(users){
   const ids=users.map(u=>u.id);
-  if(!ids.length)return {ents:[],quotas:[]};
+  if(!ids.length)return {ents:[],quotas:[],profiles:[]};
   const [ents,quotas,profiles]=await Promise.all([
     supa("entitlements?select=user_id,product_id,source_plan_id,tier,is_active,valid_until,updated_at&user_id=in.("+ids.join(",")+")",{}),
-    supa("usage_quotas?select=user_id,product_id,feature_id,billing_cycle_month,used_units,unit_limit,updated_at&user_id=in.("+ids.join(",")+")",{})
+    supa("usage_quotas?select=user_id,product_id,feature_id,billing_cycle_month,used_units,unit_limit,updated_at&user_id=in.("+ids.join(",")+")",{}),
+    supa("users?select=id,is_active,updated_at&id=in.("+ids.join(",")+")",{})
   ]);
-  return {ents:ents||[],quotas:quotas||[]};
+  return {ents:ents||[],quotas:quotas||[],profiles:profiles||[]};
 }
 
 function month(){return new Date().toISOString().slice(0,7);}
@@ -209,11 +209,12 @@ module.exports=async function(req,res){
       if(!userId)return json(res,400,{error:"Invalid user id."});
       const user=await authUser(userId);
       await ensurePublicUser(user);
-      const [ents,quotas]=await Promise.all([
+      const [ents,quotas,profiles]=await Promise.all([
         supa("entitlements?select=id,product_id,source_plan_id,tier,is_active,valid_until,updated_at&user_id=eq."+encodeURIComponent(userId)+"&order=updated_at.desc",{}),
         supa("usage_quotas?select=id,product_id,feature_id,billing_cycle_month,used_units,unit_limit,updated_at&user_id=eq."+encodeURIComponent(userId)+"&order=updated_at.desc",{}),
         supa("users?select=id,is_active,updated_at&id=eq."+encodeURIComponent(userId),{})
       ]);
+      const profile=profiles?.[0];
       return json(res,200,{
         user:{
           id:user.id,email:user.email||"",name:user.user_metadata?.full_name||user.email?.split("@")[0]||"",
