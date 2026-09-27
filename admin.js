@@ -134,7 +134,12 @@
   }
 
   async function boot() {
-    const cfg = window.FOLIORA_SUPABASE_CONFIG;
+    const configResponse = await fetch("/api/config", { cache: "no-store" });
+    const cfg = await configResponse.json().catch(() => ({}));
+    if (!configResponse.ok || !cfg.url || !cfg.anonKey) {
+      throw new Error(cfg.error || "Supabase configuration is missing.");
+    }
+    window.FOLIORA_SUPABASE_CONFIG = cfg;
     window.supabaseClient = window.supabase.createClient(cfg.url, cfg.anonKey);
     const { data } = await window.supabaseClient.auth.getSession();
     if (!data.session) {
