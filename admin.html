@@ -64,12 +64,15 @@
         </div>
         <div class="card panel">
           <div class="panel-head"><div><h2>Quick Filters</h2><p>Jump to a user segment.</p></div></div>
-          <div class="quick-actions">
-            <button class="btn" data-quick="active">Show active subscribers</button>
-            <button class="btn" data-quick="expired">Show expired subscribers</button>
-            <button class="btn" data-quick="free">Show free users</button>
-            <button class="btn" data-quick="ocr">Show OCR users</button>
-            <button class="btn" data-quick="all">Clear filters</button>
+          <div class="quick-filter-box">
+            <label for="quickFilter">Filter users</label>
+            <select id="quickFilter" class="quick-filter">
+              <option value="all">All users</option>
+              <option value="active">Active subscribers</option>
+              <option value="expired">Expired subscribers</option>
+              <option value="free">Free / inactive users</option>
+              <option value="ocr">OCR-enabled users</option>
+            </select>
           </div>
         </div>
       </div>
