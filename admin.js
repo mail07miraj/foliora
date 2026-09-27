@@ -69,6 +69,32 @@
     $("overviewActiveBar").style.width = (total ? Math.min(100, active / total * 100) : 0) + "%";
   }
 
+  function renderAnalytics() {
+    const now = Date.now();
+    const sevenDays = now - 7 * 86400000;
+    const expiringLimit = now + 7 * 86400000;
+    const recent = [...state.users].sort((a,b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)).slice(0,5);
+    const activity = [...state.users].filter(u => u.last_sign_in_at).sort((a,b) => new Date(b.last_sign_in_at) - new Date(a.last_sign_in_at)).slice(0,6);
+    const new7 = state.users.filter(u => u.created_at && new Date(u.created_at).getTime() >= sevenDays).length;
+    const expiring7 = state.users.filter(u => u.mcq_active && u.mcq_expires && new Date(u.mcq_expires).getTime() <= expiringLimit && new Date(u.mcq_expires).getTime() >= now).length;
+    const expired = state.users.filter(u => u.mcq_expired).length;
+    const ocrUsed = state.users.reduce((s,u) => s + (Number(u.ocr_used) || 0), 0);
+
+    $("newUsers7").textContent = new7;
+    $("expiring7").textContent = expiring7;
+    $("expiredCount").textContent = expired;
+    $("ocrUsedAnalytics").textContent = ocrUsed;
+    $("analyticsStatus").textContent = "Updated " + new Date().toLocaleTimeString();
+
+    $("recentRegistrations").innerHTML = recent.length ? recent.map(u =>
+      '<div class="recent-item"><div><strong>' + esc(u.name || "—") + '</strong><small>' + esc(u.email) + '</small></div><div class="recent-meta">' + esc(fmtDateTime(u.created_at)) + '</div></div>'
+    ).join("") : '<div class="recent-empty">No registration records.</div>';
+
+    $("recentActivity").innerHTML = activity.length ? activity.map(u =>
+      '<div class="recent-item"><div><strong>' + esc(u.name || "—") + '</strong><small>' + esc(u.email) + '</small></div><div class="recent-meta">' + esc(fmtDateTime(u.last_sign_in_at)) + '</div></div>'
+    ).join("") : '<div class="recent-empty">No sign-in activity available.</div>';
+  }
+
   function renderUsers() {
     const rows = state.users.filter(matches);
     $("userRows").innerHTML = rows.length ? rows.map(u => {
@@ -143,6 +169,7 @@
       state.users = data.users || [];
       renderStats();
       renderUsers();
+      renderAnalytics();
       $("lastSync").textContent = "Synced " + new Date().toLocaleTimeString();
       $("adminStatus").textContent = state.users.length + " user" + (state.users.length === 1 ? "" : "s") + " loaded.";
       $("adminStatus").className = "status success";
