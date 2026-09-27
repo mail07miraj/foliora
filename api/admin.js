@@ -76,6 +76,25 @@ async function getUserData(users){
   return {ents:ents||[],quotas:quotas||[],profiles:profiles||[]};
 }
 
+async function findExisting(table, query){
+  const rows=await supa(table+"?select=id&"+query,{});
+  return Array.isArray(rows)&&rows.length?rows[0]:null;
+}
+
+async function saveByKey(table, query, values){
+  const existing=await findExisting(table, query);
+  if(existing?.id){
+    return supa(table+"?id=eq."+encodeURIComponent(existing.id),{
+      method:"PATCH",
+      body:JSON.stringify(values)
+    });
+  }
+  return supa(table,{
+    method:"POST",
+    body:JSON.stringify(values)
+  });
+}
+
 function month(){return new Date().toISOString().slice(0,7);}
 
 function buildUserRows(users,ents,quotas,profiles=[]){
@@ -162,21 +181,22 @@ module.exports=async function(req,res){
       await ensurePublicUser(user);
 
       const validUntil=new Date(Date.now()+days*86400000).toISOString();
-      await supa("entitlements?on_conflict=user_id,product_id",{
-        method:"POST",
-        prefer:"resolution=merge-duplicates,return=representation",
-        body:JSON.stringify({user_id:userId,product_id:"foliora-mcq",tier:plan,is_active:plan==="pro",valid_until:validUntil,updated_at:new Date().toISOString()})
-      });
-      await supa("entitlements?on_conflict=user_id,product_id",{
-        method:"POST",
-        prefer:"resolution=merge-duplicates,return=representation",
-        body:JSON.stringify({user_id:userId,product_id:"foliora-ocr",tier:"free",is_active:true,valid_until:validUntil,updated_at:new Date().toISOString()})
-      });
-      await supa("usage_quotas?on_conflict=user_id,product_id,billing_cycle_month",{
-        method:"POST",
-        prefer:"resolution=merge-duplicates,return=representation",
-        body:JSON.stringify({user_id:userId,product_id:"foliora-ocr",feature_id:"ocr_gemini_vision",used_units:0,unit_limit:ocrLimit,billing_cycle_month:month(),updated_at:new Date().toISOString()})
-      });
+      const now=new Date().toISOString();
+      await saveByKey(
+        "entitlements",
+        "user_id=eq."+encodeURIComponent(userId)+"&product_id=eq.foliora-mcq",
+        {user_id:userId,product_id:"foliora-mcq",tier:plan,is_active:plan==="pro",valid_until:validUntil,updated_at:now}
+      );
+      await saveByKey(
+        "entitlements",
+        "user_id=eq."+encodeURIComponent(userId)+"&product_id=eq.foliora-ocr",
+        {user_id:userId,product_id:"foliora-ocr",tier:"free",is_active:true,valid_until:validUntil,updated_at:now}
+      );
+      await saveByKey(
+        "usage_quotas",
+        "user_id=eq."+encodeURIComponent(userId)+"&product_id=eq.foliora-ocr&billing_cycle_month=eq."+encodeURIComponent(month()),
+        {user_id:userId,product_id:"foliora-ocr",feature_id:"ocr_gemini_vision",used_units:0,unit_limit:ocrLimit,billing_cycle_month:month(),updated_at:now}
+      );
       return json(res,200,{ok:true});
     }
 
