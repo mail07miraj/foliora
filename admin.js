@@ -136,7 +136,7 @@
       $("detailCreated").textContent = fmtDateTime(u.created_at);
       $("detailLastSignIn").textContent = fmtDateTime(u.last_sign_in_at);
       $("detailEmailStatus").textContent = u.email_confirmed ? "Confirmed" : "Not confirmed";
-      $("detailAccountStatus").textContent = u.banned_until ? "Banned" : "Active";
+      $("detailAccountStatus").textContent = u.account_active === false ? "Disabled" : "Active";
       renderRecords(data);
     } catch (e) {
       $("detailRecords").textContent = e.message;
