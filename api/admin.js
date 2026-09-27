@@ -69,7 +69,7 @@ async function ensurePublicUser(user){
 async function getUserData(users){
   const ids=users.map(u=>u.id);
   if(!ids.length)return {ents:[],quotas:[]};
-  const [ents,quotas]=await Promise.all([
+  const [ents,quotas,profiles]=await Promise.all([
     supa("entitlements?select=user_id,product_id,source_plan_id,tier,is_active,valid_until,updated_at&user_id=in.("+ids.join(",")+")",{}),
     supa("usage_quotas?select=user_id,product_id,feature_id,billing_cycle_month,used_units,unit_limit,updated_at&user_id=in.("+ids.join(",")+")",{})
   ]);
@@ -78,11 +78,12 @@ async function getUserData(users){
 
 function month(){return new Date().toISOString().slice(0,7);}
 
-function buildUserRows(users,ents,quotas){
+function buildUserRows(users,ents,quotas,profiles=[]){
   return users.map(u=>{
     const mcq=(ents||[]).find(x=>x.user_id===u.id&&x.product_id==="foliora-mcq");
     const ocr=(ents||[]).find(x=>x.user_id===u.id&&x.product_id==="foliora-ocr");
     const q=(quotas||[]).find(x=>x.user_id===u.id&&x.product_id==="foliora-ocr"&&x.billing_cycle_month===month());
+    const profile=(profiles||[]).find(x=>x.id===u.id);
     const createdAt=u.created_at||u.confirmed_at||null;
     const lastSignIn=u.last_sign_in_at||null;
     const validUntil=mcq?.valid_until||null;
@@ -94,7 +95,7 @@ function buildUserRows(users,ents,quotas){
       created_at:createdAt,
       last_sign_in_at:lastSignIn,
       email_confirmed:!!u.email_confirmed_at,
-      account_active:u.banned_until?false:true,
+      account_active:profile?.is_active!==false,
       mcq_active:!!mcq?.is_active&&!isExpired,
       mcq_expired:isExpired,
       mcq_tier:mcq?.tier||null,
@@ -127,15 +128,15 @@ module.exports=async function(req,res){
     if(action==="list_users"){
       const users=await listAuthUsers();
       await Promise.all(users.map(ensurePublicUser));
-      const {ents,quotas}=await getUserData(users);
-      return json(res,200,{users:buildUserRows(users,ents,quotas)});
+      const {ents,quotas,profiles}=await getUserData(users);
+      return json(res,200,{users:buildUserRows(users,ents,quotas,profiles)});
     }
 
     if(action==="dashboard"){
       const users=await listAuthUsers();
       await Promise.all(users.map(ensurePublicUser));
-      const {ents,quotas}=await getUserData(users);
-      const rows=buildUserRows(users,ents,quotas);
+      const {ents,quotas,profiles}=await getUserData(users);
+      const rows=buildUserRows(users,ents,quotas,profiles);
       const total=rows.length;
       const activeMcq=rows.filter(u=>u.mcq_active).length;
       const ocrEnabled=rows.filter(u=>u.ocr_active).length;
@@ -143,7 +144,7 @@ module.exports=async function(req,res){
       const free=Math.max(0,total-activeMcq);
       const monthlyOcrUsed=rows.reduce((s,u)=>s+(Number(u.ocr_used)||0),0);
       const monthlyOcrLimit=rows.reduce((s,u)=>s+(Number(u.ocr_limit)||0),0);
-      const recent=[...rows].sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0).getTime()).slice(0,5);
+      const recent=[...rows].sort((a,b)=>new Date(b.created_at||0).getTime()-new Date(a.created_at||0).getTime()).slice(0,5);
       return json(res,200,{
         summary:{total,activeMcq,ocrEnabled,pro,free,monthlyOcrUsed,monthlyOcrLimit},
         recent
@@ -210,13 +211,14 @@ module.exports=async function(req,res){
       await ensurePublicUser(user);
       const [ents,quotas]=await Promise.all([
         supa("entitlements?select=id,product_id,source_plan_id,tier,is_active,valid_until,updated_at&user_id=eq."+encodeURIComponent(userId)+"&order=updated_at.desc",{}),
-        supa("usage_quotas?select=id,product_id,feature_id,billing_cycle_month,used_units,unit_limit,updated_at&user_id=eq."+encodeURIComponent(userId)+"&order=updated_at.desc",{})
+        supa("usage_quotas?select=id,product_id,feature_id,billing_cycle_month,used_units,unit_limit,updated_at&user_id=eq."+encodeURIComponent(userId)+"&order=updated_at.desc",{}),
+        supa("users?select=id,is_active,updated_at&id=eq."+encodeURIComponent(userId),{})
       ]);
       return json(res,200,{
         user:{
           id:user.id,email:user.email||"",name:user.user_metadata?.full_name||user.email?.split("@")[0]||"",
           created_at:user.created_at||null,last_sign_in_at:user.last_sign_in_at||null,
-          email_confirmed:!!user.email_confirmed_at, banned_until:user.banned_until||null
+          email_confirmed:!!user.email_confirmed_at, account_active:profile?.is_active!==false
         },
         entitlements:ents||[],
         quotas:quotas||[]
