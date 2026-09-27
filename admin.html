@@ -23,10 +23,9 @@
     <div class="brand">Foliora <span>Admin</span></div>
     <div class="top-actions"><small id="lastSync"></small><button id="logoutBtn" class="btn" type="button">Sign out</button></div>
   </header>
-
   <main class="content">
     <section class="hero">
-      <div><div class="eyebrow">ADMINISTRATOR CONSOLE</div><h1>Subscriber & Product Control</h1><p>Manage users, subscriptions, OCR quotas, activity and account status from one place.</p></div>
+      <div><div class="eyebrow">ADMINISTRATOR CONSOLE</div><h1>Subscriber & Product Control</h1><p>Manage users, subscriptions, OCR quotas and account status from one place.</p></div>
       <button id="refreshBtn" class="btn" type="button">Refresh data</button>
     </section>
 
@@ -39,10 +38,10 @@
 
     <section class="grid-2">
       <div class="card panel">
-        <div class="panel-head"><div><h2>Subscriber Management</h2><p>Search and control user accounts.</p></div><span id="adminStatus" class="status"></span></div>
+        <div class="panel-head"><div><h2>Subscriber Management</h2><p>Search, filter and control user accounts.</p></div><span id="adminStatus" class="status"></span></div>
         <div class="toolbar">
           <input id="searchInput" class="search" placeholder="Search name or email…" autocomplete="off">
-          <select id="statusFilter" class="filter"><option value="all">All users</option><option value="active">Active MCQ</option><option value="free">Free / inactive</option><option value="ocr">OCR enabled</option></select>
+          <select id="statusFilter" class="filter"><option value="all">All users</option><option value="active">Active MCQ</option><option value="expired">Expired MCQ</option><option value="free">Free / inactive</option><option value="ocr">OCR enabled</option></select>
           <select id="planFilter" class="filter"><option value="all">All plans</option><option value="pro">Pro</option><option value="free">Free</option></select>
         </div>
         <div class="table-wrap">
@@ -60,13 +59,14 @@
           <div class="meter"><span id="overviewProBar"></span></div>
           <div class="meter-row"><span>OCR enabled</span><strong id="overviewOcr">0</strong></div>
           <div class="meter"><span id="overviewOcrBar"></span></div>
-          <div class="meter-row"><span>Active accounts</span><strong id="overviewActive">0</strong></div>
+          <div class="meter-row"><span>Active MCQ</span><strong id="overviewActive">0</strong></div>
           <div class="meter"><span id="overviewActiveBar"></span></div>
         </div>
         <div class="card panel">
-          <div class="panel-head"><div><h2>Admin Actions</h2><p>Fast controls for common tasks.</p></div></div>
+          <div class="panel-head"><div><h2>Quick Filters</h2><p>Jump to a user segment.</p></div></div>
           <div class="quick-actions">
             <button class="btn" data-quick="active">Show active subscribers</button>
+            <button class="btn" data-quick="expired">Show expired subscribers</button>
             <button class="btn" data-quick="free">Show free users</button>
             <button class="btn" data-quick="ocr">Show OCR users</button>
             <button class="btn" data-quick="all">Clear filters</button>
@@ -81,13 +81,29 @@
   <div class="modal-box">
     <div class="modal-head"><div><div class="eyebrow">USER CONTROL</div><h2>Manage subscriber</h2></div><button id="closeModal" type="button" aria-label="Close">×</button></div>
     <div class="user-summary"><strong id="manageName"></strong><small id="manageEmail"></small></div>
+
+    <div class="detail-grid">
+      <div><span>Registered</span><strong id="detailCreated">—</strong></div>
+      <div><span>Last sign-in</span><strong id="detailLastSignIn">—</strong></div>
+      <div><span>Email</span><strong id="detailEmailStatus">—</strong></div>
+      <div><span>Account</span><strong id="detailAccountStatus">—</strong></div>
+    </div>
+
     <input id="manageUserId" type="hidden">
-    <div class="field"><label for="planSelect">MCQ plan</label><select id="planSelect"><option value="pro">Pro</option><option value="free">Free</option></select></div>
-    <div class="field"><label for="daysInput">Extend / activate for days</label><input id="daysInput" type="number" min="1" value="30"></div>
-    <div class="field"><label for="ocrLimitInput">OCR monthly limit</label><input id="ocrLimitInput" type="number" min="0" value="10"></div>
-    <div class="field"><label for="accountActiveSelect">Account status</label><select id="accountActiveSelect"><option value="true">Active</option><option value="false">Disabled</option></select></div>
+    <div class="form-grid">
+      <div class="field"><label for="planSelect">MCQ plan</label><select id="planSelect"><option value="pro">Pro</option><option value="free">Free</option></select></div>
+      <div class="field"><label for="daysInput">Extend / activate for days</label><input id="daysInput" type="number" min="1" value="30"></div>
+      <div class="field"><label for="ocrLimitInput">OCR monthly limit</label><input id="ocrLimitInput" type="number" min="0" value="10"></div>
+      <div class="field"><label for="accountActiveSelect">Account status</label><select id="accountActiveSelect"><option value="true">Active</option><option value="false">Disabled</option></select></div>
+    </div>
+
+    <div class="record-box">
+      <div class="record-head"><strong>Current records</strong><button id="reloadDetailBtn" class="btn small" type="button">Reload</button></div>
+      <div id="detailRecords" class="records">Loading…</div>
+    </div>
+
     <div class="actions">
-      <button id="saveSubBtn" class="btn primary" type="button">Save subscription</button>
+      <button id="saveSubBtn" class="btn primary" type="button">Save changes</button>
       <button id="resetOcrBtn" class="btn" type="button">Reset OCR</button>
       <button id="revokeBtn" class="btn danger" type="button">Revoke MCQ</button>
     </div>
