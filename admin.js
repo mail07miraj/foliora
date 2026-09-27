@@ -269,7 +269,7 @@
   $("revokeBtn").addEventListener("click", revokeSubscription);
   $("resetOcrBtn").addEventListener("click", resetOcr);
   $("reloadDetailBtn").addEventListener("click", () => loadDetail($("manageUserId").value));
-  document.querySelectorAll("[data-quick]").forEach(b => b.addEventListener("click", () => setQuick(b.dataset.quick)));
+  $("quickFilter").addEventListener("change", e => setQuick(e.target.value));
   $("userRows").addEventListener("click", e => {
     const b = e.target.closest("[data-action=manage]");
     if (b) openManage(b.dataset.id);
