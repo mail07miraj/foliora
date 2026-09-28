@@ -1518,6 +1518,14 @@ function mcqExtractInlineOptions(text) {
 }
 
 
+function mcqFindNextMeaningfulLine(lines, startIndex) {
+    for (let j = startIndex + 1; j < lines.length; j++) {
+        const value = String(lines[j] || "").trim();
+        if (value) return value;
+    }
+    return "";
+}
+
 function parseQuestions(text) {
     const cleanText = String(text || "").replace(/[\r\n\v]+/g, "\n");
     const lines = cleanText.split("\n");
