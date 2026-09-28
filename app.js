@@ -611,12 +611,11 @@ function getSequenceString(index, style) {
 }
 
 function getStandardOptionMarker(label, isUnicode, rawLabel) {
-    // Text mode must preserve the source option alphabet instead of converting
-    // every option to ক. খ. গ. ঘ.
+    // Text marker mode reproduces the actual marker found in the source
+    // paragraph. This is intentionally based on _rawLabel, not on the
+    // normalized internal answer label.
     const sourceLabel = String(rawLabel || "").trim();
-    if (/^[কখগঘA-Da-dK-Nk-n]$/.test(sourceLabel)) {
-        return sourceLabel + ".";
-    }
+    if (sourceLabel) return sourceLabel + ".";
 
     const norm = normalizeAnswerLabel(label);
     if (isUnicode) return norm + ".";
@@ -2329,6 +2328,13 @@ async function formatSelectedText(type) {
 
                         const labelMatch = mcqGetOptionMarkerMatch(sourceText);
                         if (!labelMatch || labelMatch.label !== optionLabel) continue;
+
+                        // Preserve the exact option marker found in the document.
+                        // The parser normalizes labels to Bengali for internal answer
+                        // tracking, but Text marker mode must reproduce the source marker.
+                        if (!option._rawLabel) {
+                            option._rawLabel = labelMatch.rawLabel;
+                        }
 
                         const optFontInfo = mcqExtractFontFromOoxml(
                             paragraphOoxml[pIndex]?.value || "",
