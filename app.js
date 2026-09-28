@@ -614,8 +614,8 @@ function getStandardOptionMarker(label, isUnicode, rawLabel) {
     // Text marker mode reproduces the actual marker found in the source
     // paragraph. This is intentionally based on _rawLabel, not on the
     // normalized internal answer label.
-    const sourceLabel = String(rawLabel || "").trim();
-    if (sourceLabel) return sourceLabel + ".";
+    const sourceMarker = String(rawLabel || "").trim();
+    if (sourceMarker) return sourceMarker;
 
     const norm = normalizeAnswerLabel(label);
     if (isUnicode) return norm + ".";
@@ -1499,6 +1499,9 @@ function mcqGetOptionMarkerMatch(line) {
         rawLabel,
         label,
         prefix,
+        // Exact marker token from the source, without the separator space.
+        // Examples: "(ক)", "ক.", "ক)", "(A)", "A.", "K.".
+        marker: prefix.trim(),
         text: value.slice(prefix.length).trim()
     };
 }
@@ -1519,6 +1522,7 @@ function mcqExtractInlineOptions(text) {
             index: match.index + (match[0].startsWith(" ") ? 1 : 0),
             end: markerRegex.lastIndex,
             rawLabel,
+            rawMarker: match[0].trim().replace(/\s+$/, ""),
             label
         });
     }
@@ -1532,9 +1536,11 @@ function mcqExtractInlineOptions(text) {
         const optionText = source.slice(start, end).trim();
         if (optionText) {
             const option = [markers[i].label, optionText];
-            // Keep the exact source letter (A/B/C/D, ক/খ/গ/ঘ, K/L/M/N, etc.)
-            // so "Text" marker formatting does not force everything to Bengali.
+            // Preserve the COMPLETE marker exactly as it appears in the source:
+            // "(ক)", "ক.", "ক)", "A.", "(A)", "K.", etc.
+            // Standard Text formatting must not rewrite the option marker.
             option._rawLabel = markers[i].rawLabel;
+            option._rawMarker = String(markers[i].rawMarker || markers[i].rawLabel || "").trim();
             result.push(option);
         }
     }
@@ -1628,8 +1634,9 @@ function parseQuestions(text) {
         if (singleOptMatch) {
             {
                 const option = [singleOptMatch.label, singleOptMatch.text];
-                // Preserve the exact source option letter for Text marker mode.
+                // Preserve the COMPLETE source marker, including brackets/punctuation.
                 option._rawLabel = singleOptMatch.rawLabel;
+                option._rawMarker = String(singleOptMatch.marker || singleOptMatch.rawLabel || "").trim();
                 current.options.push(option);
             }
             continue;
@@ -1695,7 +1702,25 @@ function shuffleOptions(question) {
     for (let i = 0; i < shuffled.length; i++) {
         let newLabel = markerSequence[i] || shuffled[i][0];
         const newOption = [newLabel, shuffled[i][1]];
-        // Keep the same source alphabet after shuffling (A-D stays A-D, etc.).
+        // Keep the source marker style after shuffling. If the source used
+        // "(ক)" or "A.", the shuffled output uses the same marker pattern.
+        const sourceMarker = String(
+            question.options[i]?._rawMarker ||
+            shuffled[i]?._rawMarker ||
+            newLabel
+        ).trim();
+        const markerMatch = sourceMarker.match(/^(\(?)[কখগঘA-Da-dK-Nk-n](\)?)([\.\):\]\-–—])?$/);
+        if (markerMatch) {
+            const labelOnly = newLabel;
+            const punctuation = markerMatch[3] || "";
+            newOption._rawMarker =
+                (markerMatch[1] ? "(" : "") +
+                labelOnly +
+                (markerMatch[2] ? ")" : "") +
+                punctuation;
+        } else {
+            newOption._rawMarker = sourceMarker || newLabel;
+        }
         newOption._rawLabel = newLabel;
         newOptions.push(newOption);
         if (shuffled[i][1] === correctText) { newAnswer = newLabel; }
@@ -2018,9 +2043,10 @@ function mcqInsertOption(paragraph, option, optionFont, optionSize, targetFont, 
     if (!option) return;
     const labelText = option[0] || "";
     const rawLabel = option._rawLabel || labelText;
+    const rawMarker = option._rawMarker || rawLabel;
     const label = useSymbols
         ? (OPTION_EXPORT_MAP[labelText] || labelText)
-        : getStandardOptionMarker(labelText, isUnicode, rawLabel);
+        : getStandardOptionMarker(labelText, isUnicode, rawMarker);
     const sourceStyle = option._sourceStyle || {};
     const textFont = sourceStyle.fontName || targetFont;
     const textSize = Number(sourceStyle.fontSize) || targetSize;
@@ -2334,6 +2360,9 @@ async function formatSelectedText(type) {
                         // tracking, but Text marker mode must reproduce the source marker.
                         if (!option._rawLabel) {
                             option._rawLabel = labelMatch.rawLabel;
+                        }
+                        if (!option._rawMarker) {
+                            option._rawMarker = String(labelMatch.marker || labelMatch.prefix || labelMatch.rawLabel || "").trim();
                         }
 
                         const optFontInfo = mcqExtractFontFromOoxml(
