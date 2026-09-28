@@ -1933,7 +1933,7 @@ function mcqSliceSourceRuns(runs, targetText) {
     return result;
 }
 
-function mcqInsertSourceText(paragraph, text, sourceRuns, fallbackStyle, forceBold, forceItalic, fallbackSize) {
+function mcqInsertSourceText(paragraph, text, sourceRuns, fallbackStyle, forceBold, forceItalic, fallbackSize, forcedFontName) {
     const value = String(text || "");
     if (!value) return;
 
@@ -1953,11 +1953,15 @@ function mcqInsertSourceText(paragraph, text, sourceRuns, fallbackStyle, forceBo
         if (!segment.text) continue;
         const range = paragraph.insertText(segment.text, "End");
         const style = {
-            fontName: segment.fontName || fallbackStyle?.fontName || fallbackStyle?.name || "",
-            ascii: segment.ascii || fallbackStyle?.ascii || "",
-            hAnsi: segment.hAnsi || fallbackStyle?.hAnsi || "",
-            cs: segment.cs || fallbackStyle?.cs || "",
-            eastAsia: segment.eastAsia || fallbackStyle?.eastAsia || "",
+            // When a Unicode MCQ uses OMR/ProshnaP marker fonts, the marker
+            // font must NOT leak into the actual option text. A forced font
+            // is therefore allowed for the body text while keeping source
+            // bold/italic and size information.
+            fontName: forcedFontName || segment.fontName || fallbackStyle?.fontName || fallbackStyle?.name || "",
+            ascii: forcedFontName || segment.ascii || fallbackStyle?.ascii || fallbackStyle?.hAnsi || "",
+            hAnsi: forcedFontName || segment.hAnsi || fallbackStyle?.hAnsi || "",
+            cs: forcedFontName || segment.cs || fallbackStyle?.cs || "",
+            eastAsia: forcedFontName || segment.eastAsia || fallbackStyle?.eastAsia || "",
             fontSize: Number(segment.fontSize) || Number(fallbackSize) || Number(fallbackStyle?.fontSize) || 0
         };
         mcqApplySourceFontSafe(
@@ -2076,6 +2080,9 @@ function mcqInsertOption(paragraph, option, optionFont, optionSize, targetFont, 
         );
     }
 
+    // In Unicode + OMR/ProshnaP mode, only the option marker uses
+    // optionFont. The option's actual Bangla text must remain in targetFont.
+    const optionBodyFont = useSymbols && isUnicode ? targetFont : "";
     mcqInsertSourceText(
         paragraph,
         " " + text,
@@ -2083,7 +2090,8 @@ function mcqInsertOption(paragraph, option, optionFont, optionSize, targetFont, 
         sourceStyle,
         false,
         textItalic,
-        textSize
+        textSize,
+        optionBodyFont
     );
 }
 
@@ -2173,6 +2181,9 @@ function mcqInsertNormalOptions(anchorRange, question, layout, optionFont, optio
 }
 
 function mcqInsertSmartOptions(anchorRange, question, layout, optionFont, optionSize, targetFont, targetSize, origAlign, origBold, origItalic, useSymbols, isUnicode) {
+    // Smart MCQ intentionally uses the same parsed question/options objects
+    // as Normal MCQ. This keeps support for (ক), ক., ক), A., (A), K., inline
+    // options, Unicode, English and Bijoy source formats identical.
     const count = Math.min(4, question.options.length);
     if (layout.mode === "two-per-line") {
         for (let j = 0; j < count; j += 2) {
