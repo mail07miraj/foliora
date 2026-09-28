@@ -2343,10 +2343,12 @@ async function formatSelectedText(type) {
             const smartAnswerSize = smartAnswerElement && parseFloat(smartAnswerElement.value) > 0
                 ? parseFloat(smartAnswerElement.value) : 10;
 
-            // Replace the selected source only after every source value needed by the formatter
-            // has been copied into plain JavaScript objects. The empty replacement also
-            // avoids keeping a temporary character that later has to be deleted.
-            const anchorRange = selection.insertText("", "Replace");
+            // Replace the selected source with a temporary character and TRACK the
+            // resulting range. Word can reject an empty "Replace" insertion with a native
+            // HRESULT, and an untracked range can become invalid after repeated insertions.
+            // The tracked temporary range is removed after formatting is complete.
+            const anchorRange = selection.insertText(" ", "Replace");
+            anchorRange.track();
             await context.sync();
 
             for (let i = 0; i < questions.length; i++) {
@@ -2422,8 +2424,13 @@ async function formatSelectedText(type) {
                 );
             }
 
-            // anchorRange is intentionally left as an empty insertion point.
-            // No post-insertion delete is performed, avoiding a stale-range mutation.
+            // Remove the temporary replacement character only after all generated
+            // content has been inserted. Because anchorRange is tracked, this remains
+            // valid even though the document changed during formatting.
+            anchorRange.delete();
+            anchorRange.untrack();
+            await context.sync();
+
             showStatus(String(questions.length) + " MCQs formatted successfully!");
         });
     } catch (error) {
