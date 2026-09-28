@@ -95,6 +95,17 @@
         <div class="recent-list" id="recentActivity"></div>
       </div>
     </section>
+
+    <section class="admin-tools-grid">
+      <div class="card panel">
+        <div class="panel-head"><div><h2>Product & Plan Catalog</h2><p>Live records from products, plans, features and quota rules.</p></div><button id="reloadCatalogBtn" class="btn small" type="button">Reload</button></div>
+        <div id="catalogContent" class="catalog-grid"><div class="recent-empty">Loading catalog…</div></div>
+      </div>
+      <div class="card panel">
+        <div class="panel-head"><div><h2>Admin Activity Log</h2><p>Actions performed from this administrator console.</p></div><button id="reloadActivityBtn" class="btn small" type="button">Reload</button></div>
+        <div id="activityLog" class="recent-list"><div class="recent-empty">Loading activity…</div></div>
+      </div>
+    </section>
   </main>
 </div>
 
@@ -121,6 +132,10 @@
     <div class="record-box">
       <div class="record-head"><strong>Current records</strong><button id="reloadDetailBtn" class="btn small" type="button">Reload</button></div>
       <div id="detailRecords" class="records">Loading…</div>
+    </div>
+    <div class="record-box">
+      <div class="record-head"><strong>Subscription history</strong><button id="reloadHistoryBtn" class="btn small" type="button">Reload</button></div>
+      <div id="subscriptionHistory" class="records">Loading…</div>
     </div>
 
     <div class="actions">
