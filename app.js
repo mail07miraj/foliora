@@ -1447,24 +1447,9 @@ function sanitizeQuestionAnswers(q) {
     }
 }
 
+
 function mcqIsOptionLine(line) {
-    return /^\s*\(?[কখগঘA-DK-N]\)?[\.\)\]:：]\s+/.test(String(line || "").trim());
-}
-
-function mcqIsAnswerLine(line) {
-    return /^\s*(?:সঠিক উত্তর|উত্তর|উ|Ans|Answer|mwVK DËi|DËi|D)\s*[:：\.]?/i.test(String(line || "").trim());
-}
-
-function mcqIsExplanationLine(line) {
-    return /^\s*(?:ব্যাখ্যা|Explanation|e¨vL¨v)\s*[:\-–—]/i.test(String(line || "").trim());
-}
-
-function mcqFindNextMeaningfulLine(lines, fromIndex) {
-    for (let i = fromIndex + 1; i < lines.length; i++) {
-        const value = String(lines[i] || "").trim();
-        if (value) return value;
-    }
-    return "";
+    return !!mcqGetOptionMarkerMatch(line);
 }
 
 function mcqLooksLikeQuestionStart(line, nextLine) {
@@ -1475,10 +1460,68 @@ function mcqLooksLikeQuestionStart(line, nextLine) {
     return mcqIsOptionLine(next);
 }
 
+
+function mcqGetOptionMarkerMatch(line) {
+    const value = String(line || "").trim();
+    if (!value) return null;
+
+    // Accept Bangla, English and Bijoy labels in common MCQ forms:
+    // ক. / (ক) / ক) / ক: / ক - 
+    // A. / (A) / A) / A:
+    // K. / (K) / K) / K:
+    const match = value.match(/^\s*(?:\(\s*([কখগঘA-Da-dK-Nk-n])\s*\)|([কখগঘA-Da-dK-Nk-n]))\s*(?:[\.\):\]\-–—]|\s)\s*/);
+    if (!match) return null;
+
+    const rawLabel = match[1] || match[2] || "";
+    const label = normalizeAnswerLabel(rawLabel);
+    if (!["ক", "খ", "গ", "ঘ"].includes(label)) return null;
+
+    const prefix = match[0];
+    return {
+        rawLabel,
+        label,
+        prefix,
+        text: value.slice(prefix.length).trim()
+    };
+}
+
+function mcqExtractInlineOptions(text) {
+    const source = String(text || "").trim();
+    if (!source) return [];
+
+    const markerRegex = /(?:^|\s)(?:\(\s*([কখগঘA-Da-dK-Nk-n])\s*\)|([কখগঘA-Da-dK-Nk-n]))\s*(?:[\.\):\]\-–—])\s*/g;
+    const markers = [];
+    let match;
+
+    while ((match = markerRegex.exec(source)) !== null) {
+        const rawLabel = match[1] || match[2] || "";
+        const label = normalizeAnswerLabel(rawLabel);
+        if (!["ক", "খ", "গ", "ঘ"].includes(label)) continue;
+        markers.push({
+            index: match.index + (match[0].startsWith(" ") ? 1 : 0),
+            end: markerRegex.lastIndex,
+            rawLabel,
+            label
+        });
+    }
+
+    if (!markers.length) return [];
+
+    const result = [];
+    for (let i = 0; i < markers.length; i++) {
+        const start = markers[i].end;
+        const end = i + 1 < markers.length ? markers[i + 1].index : source.length;
+        const optionText = source.slice(start, end).trim();
+        if (optionText) result.push([markers[i].label, optionText]);
+    }
+    return result;
+}
+
+
 function parseQuestions(text) {
-    let cleanText = String(text || "").replace(/([\r\n\v]+)/g, "\n");
-    let lines = cleanText.split("\n");
-    let questions = [];
+    const cleanText = String(text || "").replace(/[\r\n\v]+/g, "\n");
+    const lines = cleanText.split("\n");
+    const questions = [];
     let current = null;
 
     function flush() {
@@ -1492,18 +1535,19 @@ function parseQuestions(text) {
     for (let i = 0; i < lines.length; i++) {
         const line = String(lines[i] || "").trim();
         if (!line) continue;
+
         const nextLine = mcqFindNextMeaningfulLine(lines, i);
 
-        let expMatch = line.match(/^\s*(?:ব্যাখ্যা|Explanation|e¨vL¨v)\s*[: \-\u2013\u2014]\s*(.+)$/i);
+        const expMatch = line.match(/^\s*(?:ব্যাখ্যা|Explanation|e¨vL¨v)\s*[: \-\u2013\u2014]\s*(.+)$/i);
         if (expMatch && current) {
             current.explanation = expMatch[1].trim();
             continue;
         }
 
-        let ansMatch = line.match(/^\s*(?:সঠিক উত্তর|উত্তর|উ|Ans|Answer|mwVK DËi|DËi|D)\s*[:：\.]?\s*(.*)$/i);
+        const ansMatch = line.match(/^\s*(?:সঠিক উত্তর|উত্তর|উ|Ans|Answer|mwVK DËi|DËi|D)\s*[:：\.]?\s*(.*)$/i);
         if (ansMatch && current) {
             const ansContent = ansMatch[1] || "";
-            const ansExtr = ansContent.match(/[\(\[\{]?\s*([ক-ঘA-DK-NP-Sa-dk-np-s])\s*[\)\]\}]?/);
+            const ansExtr = ansContent.match(/[\(\[\{]?\s*([ক-ঘA-Da-dK-Nk-nP-S])\s*[\)\]\}]?/);
             if (ansExtr) {
                 current.answer = normalizeAnswerLabel(ansExtr[1]);
                 current.original_answer = current.answer;
@@ -1514,19 +1558,17 @@ function parseQuestions(text) {
 
         if (mcqLooksLikeQuestionStart(line, nextLine)) {
             flush();
-            let qMatch = line.match(/^\s*((?:\d+|[০-৯]+))\s*[\.\ \)\]]\s*(.*)$/);
-            let rawQ = qMatch ? qMatch[2] : line;
-            let optPattern = /([ক-ঘK-N])\s*[\.\) :]\s*(.+?)(?=\s+[ক-ঘK-N]\s*[\.\) :]\s*|$)/g;
-            let optionsFound = [];
-            let questionText = rawQ;
-            let firstOptIndex = rawQ.search(/(?:\s+|^)([ক-ঘK-N])\s*[\.\) :]\s*/);
 
-            if (firstOptIndex !== -1) {
-                questionText = rawQ.substring(0, firstOptIndex).trim();
-                let optionsPart = rawQ.substring(firstOptIndex).trim();
-                let match;
-                while ((match = optPattern.exec(optionsPart)) !== null) {
-                    optionsFound.push([normalizeAnswerLabel(match[1]), match[2].trim()]);
+            const qMatch = line.match(/^\s*((?:\d+|[০-৯]+))\s*[\.\ \)\]]\s*(.*)$/);
+            const rawQ = qMatch ? qMatch[2] : line;
+
+            const optionsFound = mcqExtractInlineOptions(rawQ);
+            let questionText = rawQ;
+
+            if (optionsFound.length) {
+                const firstMarker = rawQ.search(/(?:^|\s)(?:\(\s*[কখগঘA-Da-dK-Nk-n]\s*\)|[কখগঘA-Da-dK-Nk-n])\s*[\.\):\]\-–—]\s*/);
+                if (firstMarker >= 0) {
+                    questionText = rawQ.slice(0, firstMarker).trim();
                 }
             }
 
@@ -1544,22 +1586,18 @@ function parseQuestions(text) {
 
         if (!current) continue;
 
-        let optPattern = /([ক-ঘK-N])\s*[\.\) :]\s*(.+?)(?=\s+[ক-ঘK-N]\s*[\.\) :]\s*|$)/g;
-        let match;
-        let foundInline = false;
-        while ((match = optPattern.exec(line)) !== null) {
-            current.options.push([normalizeAnswerLabel(match[1]), match[2].trim()]);
-            foundInline = true;
-        }
-        if (foundInline) continue;
-
-        let singleOptMatch = line.match(/^\s*\(?([ক-ঘA-DKLMNa-dklmn])\)?[. :]?\s*(.+?)$/);
-        if (singleOptMatch) {
-            current.options.push([normalizeAnswerLabel(singleOptMatch[1]), singleOptMatch[2].trim()]);
+        const inlineOptions = mcqExtractInlineOptions(line);
+        if (inlineOptions.length) {
+            for (const option of inlineOptions) current.options.push(option);
             continue;
         }
 
-        // A non-option line followed by another option is a new question.
+        const singleOptMatch = mcqGetOptionMarkerMatch(line);
+        if (singleOptMatch) {
+            current.options.push([singleOptMatch.label, singleOptMatch.text]);
+            continue;
+        }
+
         if (current.options.length > 0 && mcqLooksLikeQuestionStart(line, nextLine)) {
             flush();
             current = {
@@ -2225,8 +2263,8 @@ async function formatSelectedText(type) {
                         );
                         if (pIndex > foundIndex && mcqLooksLikeQuestionStart(sourceText, nextText) && !mcqIsOptionLine(sourceText)) break;
 
-                        const labelMatch = sourceText.match(/^\s*\(?([ক-ঘA-DK-N])\)?\s*[\.\)\]:：]\s*/i);
-                        if (!labelMatch || normalizeAnswerLabel(labelMatch[1]) !== optionLabel) continue;
+                        const labelMatch = mcqGetOptionMarkerMatch(sourceText);
+                        if (!labelMatch || labelMatch.label !== optionLabel) continue;
 
                         const optFontInfo = mcqExtractFontFromOoxml(
                             paragraphOoxml[pIndex]?.value || "",
@@ -2285,7 +2323,11 @@ async function formatSelectedText(type) {
             const smartAnswerSize = smartAnswerElement && parseFloat(smartAnswerElement.value) > 0
                 ? parseFloat(smartAnswerElement.value) : 10;
 
-            const anchorRange = selection.insertText(" ", "Replace");
+            // Replace the selected source only after every source value needed by the formatter
+            // has been copied into plain JavaScript objects. The empty replacement also
+            // avoids keeping a temporary character that later has to be deleted.
+            const anchorRange = selection.insertText("", "Replace");
+            await context.sync();
 
             for (let i = 0; i < questions.length; i++) {
                 const q = questions[i];
@@ -2360,8 +2402,8 @@ async function formatSelectedText(type) {
                 );
             }
 
-            anchorRange.delete();
-            await context.sync();
+            // anchorRange is intentionally left as an empty insertion point.
+            // No post-insertion delete is performed, avoiding a stale-range mutation.
             showStatus(String(questions.length) + " MCQs formatted successfully!");
         });
     } catch (error) {
