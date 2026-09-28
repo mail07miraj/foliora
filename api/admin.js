@@ -129,6 +129,40 @@ async function recordHistory(userId, productId, action, values, adminId, note=""
   }catch(_e){}
 }
 
+async function adminAuthRequest(path, method="GET", body){
+  const key=process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const url=process.env.SUPABASE_URL;
+  const r=await fetch(url+"/auth/v1/admin/"+path,{
+    method,
+    headers:{apikey:key,Authorization:"Bearer "+key,"Content-Type":"application/json"},
+    ...(body===undefined?{}:{body:JSON.stringify(body)})
+  });
+  const data=await r.json().catch(()=>null);
+  if(!r.ok)throw new Error(data?.msg||data?.message||data?.error_description||"Authentication admin request failed.");
+  return data;
+}
+
+function pickColumn(row,candidates){
+  const keys=Object.keys(row||{});
+  return candidates.find(k=>keys.includes(k))||null;
+}
+
+async function updatePlanRecord(planId, price, validityDays, name){
+  const rows=await supa("plans?id=eq."+encodeURIComponent(planId)+"&limit=1",{});
+  const row=rows?.[0];
+  if(!row)throw new Error("Plan record not found.");
+  const priceCol=pickColumn(row,["price","amount","monthly_price","price_monthly","unit_price","cost"]);
+  const validityCol=pickColumn(row,["validity_days","duration_days","days","duration","valid_days","period_days"]);
+  const nameCol=pickColumn(row,["name","plan_name","title"]);
+  const patch={};
+  if(price!==undefined&&priceCol)patch[priceCol]=Number(price);
+  if(validityDays!==undefined&&validityCol)patch[validityCol]=Math.max(1,Number(validityDays));
+  if(name!==undefined&&nameCol)patch[nameCol]=String(name).trim();
+  if(!Object.keys(patch).length)throw new Error("This plan table has no recognized price/validity/name columns.");
+  const updated=await supa("plans?id=eq."+encodeURIComponent(planId),{method:"PATCH",body:JSON.stringify(patch)});
+  return {updated:updated||[],columns:{price:priceCol,validity:validityCol,name:nameCol}};
+}
+
 function month(){return new Date().toISOString().slice(0,7);}
 
 function buildUserRows(users,ents,quotas,profiles=[]){
@@ -177,6 +211,41 @@ module.exports=async function(req,res){
       req.on("end",()=>{try{resolve(JSON.parse(s||"{}"))}catch(e){reject(e)}});
     });
     const action=body.action;
+
+    if(action==="create_subscriber"){
+      const email=String(body.email||"").trim().toLowerCase();
+      const password=String(body.password||"");
+      const name=String(body.name||"").trim();
+      if(!email||!password||!name)return json(res,400,{error:"Email, password and name are required."});
+      if(password.length<8)return json(res,400,{error:"Password must be at least 8 characters."});
+      const created=await adminAuthRequest("users","POST",{email,password,email_confirm:true,user_metadata:{full_name:name}});
+      await ensurePublicUser(created);
+      await logActivity(admin,"subscriber_created",created.id,created.email,{name});
+      return json(res,200,{ok:true,user:{id:created.id,email:created.email,name}});
+    }
+
+    if(action==="update_user"){
+      const userId=String(body.userId||"");
+      if(!userId)return json(res,400,{error:"Invalid user id."});
+      const current=await authUser(userId);
+      const email=body.email===undefined?undefined:String(body.email||"").trim().toLowerCase();
+      const name=body.name===undefined?undefined:String(body.name||"").trim();
+      const password=body.password===undefined?undefined:String(body.password||"");
+      if(password!==undefined&&password&&password.length<8)return json(res,400,{error:"New password must be at least 8 characters."});
+      const patch={};
+      if(email!==undefined)patch.email=email;
+      if(name!==undefined)patch.user_metadata={...(current.user_metadata||{}),full_name:name};
+      if(password)patch.password=password;
+      if(email!==undefined)patch.email_confirm=true;
+      const updated=Object.keys(patch).length?await adminAuthRequest("users/"+encodeURIComponent(userId),"PUT",patch):current;
+      await ensurePublicUser(updated);
+      const publicPatch={};
+      if(email!==undefined)publicPatch.email=email;
+      if(name!==undefined)publicPatch.full_name=name;
+      if(Object.keys(publicPatch).length)await supa("users?id=eq."+encodeURIComponent(userId),{method:"PATCH",body:JSON.stringify({...publicPatch,updated_at:new Date().toISOString()})});
+      await logActivity(admin,"subscriber_updated",userId,updated.email,{emailChanged:email!==undefined,nameChanged:name!==undefined,passwordChanged:!!password});
+      return json(res,200,{ok:true,user:{id:updated.id,email:updated.email,name:updated.user_metadata?.full_name||name||""}});
+    }
 
     if(action==="list_users"){
       const users=await listAuthUsers();
@@ -278,6 +347,14 @@ module.exports=async function(req,res){
       const limit=Math.min(200,Math.max(1,Number(body.limit||50)));
       const rows=await supa("admin_activity_logs?select=id,admin_user_id,action,target_user_id,target_email,metadata,created_at&order=created_at.desc&limit="+limit,{});
       return json(res,200,{activities:rows||[]});
+    }
+
+    if(action==="update_plan"){
+      const planId=String(body.planId||"");
+      if(!planId)return json(res,400,{error:"Invalid plan id."});
+      const result=await updatePlanRecord(planId,body.price,body.validityDays,body.name);
+      await logActivity(admin,"plan_updated",null,null,{planId,price:body.price,validityDays:body.validityDays,name:body.name,columns:result.columns});
+      return json(res,200,{ok:true,...result});
     }
 
     if(action==="catalog"){
