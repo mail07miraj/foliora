@@ -1,5 +1,5 @@
 (() => {
-  const state = { users: [], filter: "", status: "all", plan: "all" };
+  const state = { users: [], filter: "", status: "all", plan: "all", catalogPlans: [] };
   const $ = id => document.getElementById(id);
   const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
   const fmtDate = v => v ? new Date(v).toLocaleDateString() : "—";
@@ -137,18 +137,65 @@
       '</tbody></table></div></div>';
   }
 
+  function planField(row, candidates) {
+    const key=Object.keys(row||{}).find(k=>candidates.includes(k));
+    return key ? row[key] : "";
+  }
+
+  function renderPlans(rows) {
+    state.catalogPlans=rows||[];
+    if(!rows||!rows.length)return '<div class="catalog-block"><strong>Plans</strong><div class="recent-empty">No plan records.</div></div>';
+    return '<div class="catalog-block"><div class="catalog-title"><strong>Plans</strong><span>'+rows.length+' records · editable</span></div>'+
+      '<div class="catalog-table-wrap"><table class="catalog-table"><thead><tr><th>Name</th><th>Price</th><th>Validity</th><th>ID</th><th></th></tr></thead><tbody>'+
+      rows.map(r=>{
+        const name=planField(r,["name","plan_name","title"]);
+        const price=planField(r,["price","amount","monthly_price","price_monthly","unit_price","cost"]);
+        const validity=planField(r,["validity_days","duration_days","days","duration","valid_days","period_days"]);
+        return '<tr><td>'+esc(name||"—")+'</td><td>'+esc(price===""?"—":price)+'</td><td>'+esc(validity===""?"—":validity)+' days</td><td>'+esc(r.id||"—")+'</td><td><button class="btn small" data-action="edit-plan" data-id="'+esc(r.id)+'">Edit</button></td></tr>';
+      }).join('')+
+      '</tbody></table></div></div>';
+  }
+
   async function loadCatalog() {
     $("catalogContent").innerHTML = '<div class="recent-empty">Loading catalog…</div>';
     try {
       const data=await api("catalog");
       $("catalogContent").innerHTML =
         renderGenericCatalog("Products",data.products)+
-        renderGenericCatalog("Plans",data.plans)+
+        renderPlans(data.plans)+
         renderGenericCatalog("Features",data.features)+
         renderGenericCatalog("Plan feature quotas",data.plan_feature_quotas);
     } catch(e) {
       $("catalogContent").innerHTML='<div class="recent-empty error">'+esc(e.message)+'</div>';
     }
+  }
+
+  function openPlanEdit(id) {
+    const row=state.catalogPlans.find(x=>String(x.id)===String(id));
+    if(!row)return;
+    $("planEditId").value=row.id;
+    $("planEditName").value=planField(row,["name","plan_name","title"]);
+    $("planEditPrice").value=planField(row,["price","amount","monthly_price","price_monthly","unit_price","cost"]);
+    $("planEditValidity").value=planField(row,["validity_days","duration_days","days","duration","valid_days","period_days"]);
+    $("planStatus").textContent="";
+    $("planStatus").className="modal-status";
+    $("planModal").classList.remove("hidden");
+  }
+
+  async function savePlan() {
+    const planId=$("planEditId").value;
+    $("savePlanBtn").disabled=true;
+    $("planStatus").textContent="Saving…";
+    $("planStatus").className="modal-status";
+    try{
+      await api("update_plan",{planId,name:$("planEditName").value.trim(),price:Number($("planEditPrice").value),validityDays:Number($("planEditValidity").value)});
+      $("planStatus").textContent="Plan updated successfully.";
+      $("planStatus").className="modal-status success";
+      await loadCatalog();
+    }catch(e){
+      $("planStatus").textContent=e.message;
+      $("planStatus").className="modal-status error";
+    }finally{$("savePlanBtn").disabled=false;}
   }
 
   async function loadActivity() {
@@ -201,6 +248,9 @@
     $("manageUserId").value = u.id;
     $("manageEmail").textContent = u.email;
     $("manageName").textContent = u.name || "—";
+    $("manageEmailInput").value = u.email || "";
+    $("manageNameInput").value = u.name || "";
+    $("managePasswordInput").value = "";
     $("planSelect").value = u.mcq_tier || "pro";
     $("daysInput").value = 30;
     $("ocrLimitInput").value = u.ocr_limit ?? 10;
@@ -247,6 +297,12 @@
     $("manageStatus").textContent = "Saving…";
     $("manageStatus").className = "modal-status";
     try {
+      await api("update_user", {
+        userId,
+        email: $("manageEmailInput").value.trim(),
+        name: $("manageNameInput").value.trim(),
+        password: $("managePasswordInput").value
+      });
       await api("set_subscription", { userId, plan, days, ocrLimit });
       await api("set_account_status", { userId, active });
       $("manageStatus").textContent = "Changes saved successfully.";
@@ -275,6 +331,25 @@
       $("manageStatus").textContent = e.message;
       $("manageStatus").className = "modal-status error";
     }
+  }
+
+  async function createSubscriber() {
+    const name=$("newUserName").value.trim(), email=$("newUserEmail").value.trim(), password=$("newUserPassword").value;
+    const plan=$("newUserPlan").value, days=Math.max(1,Number($("newUserDays").value||30)), ocrLimit=Math.max(0,Number($("newUserOcr").value||0));
+    $("createSubscriberBtn").disabled=true;
+    $("addSubscriberStatus").textContent="Creating subscriber…";
+    $("addSubscriberStatus").className="modal-status";
+    try{
+      const created=await api("create_subscriber",{name,email,password});
+      await api("set_subscription",{userId:created.user.id,plan,days,ocrLimit});
+      $("addSubscriberStatus").textContent="Subscriber created successfully.";
+      $("addSubscriberStatus").className="modal-status success";
+      await loadUsers();
+      setTimeout(()=>{$("addSubscriberModal").classList.add("hidden");},700);
+    }catch(e){
+      $("addSubscriberStatus").textContent=e.message;
+      $("addSubscriberStatus").className="modal-status error";
+    }finally{$("createSubscriberBtn").disabled=false;}
   }
 
   async function resetOcr() {
@@ -354,6 +429,22 @@
   $("reloadHistoryBtn").addEventListener("click", () => loadHistory($("manageUserId").value));
   $("reloadCatalogBtn").addEventListener("click", loadCatalog);
   $("reloadActivityBtn").addEventListener("click", loadActivity);
+  $("addSubscriberBtn").addEventListener("click", () => {
+    ["newUserName","newUserEmail","newUserPassword"].forEach(id => $(id).value="");
+    $("newUserPlan").value="free"; $("newUserDays").value=30; $("newUserOcr").value=10;
+    $("addSubscriberStatus").textContent=""; $("addSubscriberStatus").className="modal-status";
+    $("addSubscriberModal").classList.remove("hidden");
+  });
+  $("createSubscriberBtn").addEventListener("click", createSubscriber);
+  $("cancelAddSubscriber").addEventListener("click", () => $("addSubscriberModal").classList.add("hidden"));
+  $("closeAddSubscriber").addEventListener("click", () => $("addSubscriberModal").classList.add("hidden"));
+  $("savePlanBtn").addEventListener("click", savePlan);
+  $("cancelPlanBtn").addEventListener("click", () => $("planModal").classList.add("hidden"));
+  $("closePlanModal").addEventListener("click", () => $("planModal").classList.add("hidden"));
+  $("catalogContent").addEventListener("click", e => {
+    const b=e.target.closest("[data-action=edit-plan]");
+    if(b)openPlanEdit(b.dataset.id);
+  });
   $("quickFilter").addEventListener("change", e => setQuick(e.target.value));
   $("userRows").addEventListener("click", e => {
     const b = e.target.closest("[data-action=manage]");
