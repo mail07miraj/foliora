@@ -95,6 +95,40 @@ async function saveByKey(table, query, values){
   });
 }
 
+async function logActivity(admin, action, targetUserId, targetEmail, metadata={}){
+  try{
+    await supa("admin_activity_logs",{
+      method:"POST",
+      body:JSON.stringify({
+        admin_user_id:admin.id,
+        action,
+        target_user_id:targetUserId||null,
+        target_email:targetEmail||null,
+        metadata
+      })
+    });
+  }catch(_e){}
+}
+
+async function recordHistory(userId, productId, action, values, adminId, note=""){
+  try{
+    await supa("subscription_history",{
+      method:"POST",
+      body:JSON.stringify({
+        user_id:userId,
+        product_id:productId,
+        action,
+        tier:values.tier||null,
+        valid_from:values.valid_from||null,
+        valid_until:values.valid_until||null,
+        ocr_limit:values.ocr_limit??null,
+        changed_by:adminId||null,
+        note
+      })
+    });
+  }catch(_e){}
+}
+
 function month(){return new Date().toISOString().slice(0,7);}
 
 function buildUserRows(users,ents,quotas,profiles=[]){
@@ -197,6 +231,8 @@ module.exports=async function(req,res){
         "user_id=eq."+encodeURIComponent(userId)+"&product_id=eq.foliora-ocr&billing_cycle_month=eq."+encodeURIComponent(month()),
         {user_id:userId,product_id:"foliora-ocr",feature_id:"ocr_gemini_vision",used_units:0,unit_limit:ocrLimit,billing_cycle_month:month(),updated_at:now}
       );
+      await recordHistory(userId,"foliora-mcq","subscription_updated",{tier:plan,valid_from:now,valid_until:validUntil,ocr_limit:ocrLimit},admin.id,"Admin updated subscription");
+      await logActivity(admin,"subscription_updated",userId,user.email,{plan,days,ocrLimit,validUntil});
       return json(res,200,{ok:true});
     }
 
@@ -204,6 +240,9 @@ module.exports=async function(req,res){
       const userId=String(body.userId||"");
       if(!userId)return json(res,400,{error:"Invalid user id."});
       await supa("entitlements?user_id=eq."+encodeURIComponent(userId)+"&product_id=eq.foliora-mcq",{method:"PATCH",body:JSON.stringify({is_active:false,updated_at:new Date().toISOString()})});
+      const user=await authUser(userId);
+      await recordHistory(userId,"foliora-mcq","revoked",{tier:null,valid_from:null,valid_until:null},admin.id,"Admin revoked MCQ subscription");
+      await logActivity(admin,"subscription_revoked",userId,user.email,{product:"foliora-mcq"});
       return json(res,200,{ok:true});
     }
 
@@ -211,6 +250,9 @@ module.exports=async function(req,res){
       const userId=String(body.userId||"");
       if(!userId)return json(res,400,{error:"Invalid user id."});
       await supa("usage_quotas?user_id=eq."+encodeURIComponent(userId)+"&product_id=eq.foliora-ocr&billing_cycle_month=eq."+month(),{method:"PATCH",body:JSON.stringify({used_units:0,updated_at:new Date().toISOString()})});
+      const user=await authUser(userId);
+      await recordHistory(userId,"foliora-ocr","usage_reset",{tier:null,valid_from:null,valid_until:null},admin.id,"Admin reset OCR usage");
+      await logActivity(admin,"ocr_usage_reset",userId,user.email,{product:"foliora-ocr",billingCycle:month()});
       return json(res,200,{ok:true});
     }
 
@@ -221,7 +263,31 @@ module.exports=async function(req,res){
       const user=await authUser(userId);
       await ensurePublicUser(user);
       await supa("users?id=eq."+encodeURIComponent(userId),{method:"PATCH",body:JSON.stringify({is_active:active,updated_at:new Date().toISOString()})});
+      await logActivity(admin,active?"account_enabled":"account_disabled",userId,user.email,{active});
       return json(res,200,{ok:true,active});
+    }
+
+    if(action==="get_subscription_history"){
+      const userId=String(body.userId||"");
+      if(!userId)return json(res,400,{error:"Invalid user id."});
+      const rows=await supa("subscription_history?select=id,product_id,action,tier,valid_from,valid_until,ocr_limit,changed_by,note,created_at&user_id=eq."+encodeURIComponent(userId)+"&order=created_at.desc&limit=100",{});
+      return json(res,200,{history:rows||[]});
+    }
+
+    if(action==="get_activity_log"){
+      const limit=Math.min(200,Math.max(1,Number(body.limit||50)));
+      const rows=await supa("admin_activity_logs?select=id,admin_user_id,action,target_user_id,target_email,metadata,created_at&order=created_at.desc&limit="+limit,{});
+      return json(res,200,{activities:rows||[]});
+    }
+
+    if(action==="catalog"){
+      const [products,plans,features,planQuotas]=await Promise.all([
+        supa("products?select=*",{}),
+        supa("plans?select=*",{}),
+        supa("features?select=*",{}),
+        supa("plan_feature_quotas?select=*",{})
+      ]);
+      return json(res,200,{products:products||[],plans:plans||[],features:features||[],plan_feature_quotas:planQuotas||[]});
     }
 
     if(action==="get_user_detail"){
