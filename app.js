@@ -1901,16 +1901,13 @@ function mcqInsertSourceText(paragraph, text, sourceRuns, fallbackStyle, forceBo
             eastAsia: segment.eastAsia || fallbackStyle?.eastAsia || "",
             fontSize: Number(segment.fontSize) || Number(fallbackSize) || Number(fallbackStyle?.fontSize) || 0
         };
-        function mcqApplySourceFontSafe(range, sourceStyle, fontSize, bold, italic) {
-            const style = sourceStyle || {};
-            const fontName = style.fontName || style.name || "";
-            if (fontName) {
-                range.font.name = fontName;
-            }
-            if (fontSize) range.font.size = fontSize;
-            range.font.bold = bold === true;
-            range.font.italic = italic === true;
-        }
+        mcqApplySourceFontSafe(
+            range,
+            style,
+            style.fontSize,
+            forceBold === true,
+            segment.italic === true ? true : forceItalic === true
+        );
     }
 }
 
@@ -1930,12 +1927,8 @@ function mcqExtractFontFromOoxml(ooxml, fallbackFont = "") {
         const hAnsi = get("hAnsi");
         const cs = get("cs");
         const eastAsia = get("eastAsia");
-
-        // টেক্সটে ইউনিকোড বাংলা থাকলে cs ফন্ট প্রাধান্য পাবে, নতুবা ascii/hAnsi
-        const effectiveFont = cs || ascii || hAnsi || eastAsia || fallbackFont || "";
-
         return {
-            name: effectiveFont,
+            name: ascii || hAnsi || cs || eastAsia || fallbackFont || "",
             ascii: ascii || "",
             hAnsi: hAnsi || "",
             cs: cs || "",
@@ -1945,16 +1938,10 @@ function mcqExtractFontFromOoxml(ooxml, fallbackFont = "") {
     const paragraphFont = xml.match(/<w:rFonts\b([^>]*)\/?>/i);
     if (paragraphFont) {
         const attrs = paragraphFont[1] || "";
-        const get = (name) => {
+        for (const name of ["ascii", "hAnsi", "cs", "eastAsia"]) {
             const m = attrs.match(new RegExp("w:" + name + '="([^"]+)"', "i"));
-            return m ? m[1] : "";
-        };
-        const ascii = get("ascii");
-        const hAnsi = get("hAnsi");
-        const cs = get("cs");
-        const eastAsia = get("eastAsia");
-        const effectiveFont = cs || ascii || hAnsi || eastAsia || fallbackFont || "";
-        return { name: effectiveFont, ascii, hAnsi, cs, eastAsia };
+            if (m && m[1]) return { name: m[1], ascii: m[1], hAnsi: m[1], cs: m[1], eastAsia: m[1] };
+        }
     }
     return { name: fallbackFont || "", ascii: fallbackFont || "", hAnsi: fallbackFont || "", cs: fallbackFont || "", eastAsia: fallbackFont || "" };
 }
@@ -1992,15 +1979,7 @@ function mcqInsertOption(paragraph, option, optionFont, optionSize, targetFont, 
     const labelText = option[0] || "";
     const label = useSymbols ? (OPTION_EXPORT_MAP[labelText] || labelText) : getStandardOptionMarker(labelText, isUnicode);
     const sourceStyle = option._sourceStyle || {};
-    
-    // যদি OMR বা সিম্বল মোড চালু থাকে, তবে অপশনের মূল টেক্সট বডিতে BanglaOMR ফন্ট বসতে দেব না 
-    // পরিবর্তে মূল ইউনিকোড ফন্ট (Kalpurush বা SutonnyMJ) ব্যবহার করব।
-    let textFont = sourceStyle.fontName || targetFont;
-    const isOmrOrSymbolFont = /omr|proshnap/i.test(textFont);
-    if (useSymbols && isOmrOrSymbolFont) {
-        textFont = targetFont;
-    }
-
+    const textFont = sourceStyle.fontName || targetFont;
     const textSize = Number(sourceStyle.fontSize) || targetSize;
     const textItalic = sourceStyle.italic === true;
 
@@ -2015,7 +1994,6 @@ function mcqInsertOption(paragraph, option, optionFont, optionSize, targetFont, 
 
     const markerRange = paragraph.insertText(label, "End");
     if (useSymbols) {
-        // মার্কার বা লেবেলে কেবল ওএমআর/প্রশ্নপ সিম্বল ফন্ট বসবে
         mcqApplyFontSafe(markerRange, optionFont, optionSize, false, textItalic);
     } else {
         const markerSegments = mcqSliceSourceRuns(option._sourceRuns || [], labelText);
@@ -2029,13 +2007,11 @@ function mcqInsertOption(paragraph, option, optionFont, optionSize, targetFont, 
         );
     }
 
-    // অপশনের মূল লেখার অংশটিতে সঠিক সাধারণ ফন্ট (textFont) নিশ্চিত করা হলো
-    const adjustedSourceStyle = { ...sourceStyle, fontName: textFont };
     mcqInsertSourceText(
         paragraph,
         " " + text,
         option._sourceRuns || [],
-        adjustedSourceStyle,
+        sourceStyle,
         false,
         textItalic,
         textSize
