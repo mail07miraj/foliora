@@ -1948,23 +1948,29 @@ function mcqExtractFontFromOoxml(ooxml, fallbackFont = "") {
 
 function mcqApplySourceFontSafe(range, sourceStyle, fontSize, bold, italic) {
     const style = sourceStyle || {};
-    const fontName = style.fontName || style.name || "";
+    const fontName = String(style.fontName || style.name || "").trim();
+
+    // Word can throw a native HRESULT when font slot properties (ascii/hAnsi/
+    // eastAsia/cs) are applied to newly-created Unicode ranges. The primary
+    // font.name property is enough to preserve the source font and is supported
+    // across the Word versions used by the add-in. Keep every font operation
+    // isolated so one problematic font can never abort the whole formatter.
     if (fontName) {
-        range.font.name = fontName;
         try {
-            if (typeof Office !== "undefined" && Office.context && Office.context.requirements &&
-                Office.context.requirements.isSetSupported &&
-                Office.context.requirements.isSetSupported("WordApiDesktop", "1.3")) {
-                if (style.ascii) range.font.nameAscii = style.ascii;
-                if (style.hAnsi) range.font.nameOther = style.hAnsi;
-                if (style.eastAsia) range.font.nameFarEast = style.eastAsia;
-                if (style.cs) range.font.nameBidirectional = style.cs;
-            }
-        } catch (e) {}
+            range.font.name = fontName;
+        } catch (e) {
+            // Preserve formatting flow even if Word rejects this font name.
+            console.warn("MCQ source font could not be applied:", fontName, e);
+        }
     }
-    if (fontSize) range.font.size = fontSize;
-    range.font.bold = bold === true;
-    range.font.italic = italic === true;
+
+    try {
+        if (fontSize) range.font.size = fontSize;
+        range.font.bold = bold === true;
+        range.font.italic = italic === true;
+    } catch (e) {
+        console.warn("MCQ character formatting could not be applied:", e);
+    }
 }
 
 function mcqApplyFontSafe(range, fontName, fontSize, bold, italic) {
