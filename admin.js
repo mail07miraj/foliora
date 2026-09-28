@@ -128,6 +128,58 @@
     $("detailRecords").innerHTML = parts.length ? parts.join("") : "No entitlement or quota records.";
   }
 
+  function renderGenericCatalog(title, rows) {
+    if (!rows || !rows.length) return '<div class="catalog-block"><strong>'+esc(title)+'</strong><div class="recent-empty">No records.</div></div>';
+    const keys=[...new Set(rows.flatMap(r=>Object.keys(r)))].slice(0,8);
+    return '<div class="catalog-block"><div class="catalog-title"><strong>'+esc(title)+'</strong><span>'+rows.length+' record'+(rows.length===1?'':'s')+'</span></div>' +
+      '<div class="catalog-table-wrap"><table class="catalog-table"><thead><tr>'+keys.map(k=>'<th>'+esc(k)+'</th>').join('')+'</tr></thead><tbody>'+
+      rows.slice(0,30).map(r=>'<tr>'+keys.map(k=>'<td>'+esc(r[k]===null||r[k]===undefined?'—':typeof r[k]==='object'?JSON.stringify(r[k]):r[k])+'</td>').join('')+'</tr>').join('')+
+      '</tbody></table></div></div>';
+  }
+
+  async function loadCatalog() {
+    $("catalogContent").innerHTML = '<div class="recent-empty">Loading catalog…</div>';
+    try {
+      const data=await api("catalog");
+      $("catalogContent").innerHTML =
+        renderGenericCatalog("Products",data.products)+
+        renderGenericCatalog("Plans",data.plans)+
+        renderGenericCatalog("Features",data.features)+
+        renderGenericCatalog("Plan feature quotas",data.plan_feature_quotas);
+    } catch(e) {
+      $("catalogContent").innerHTML='<div class="recent-empty error">'+esc(e.message)+'</div>';
+    }
+  }
+
+  async function loadActivity() {
+    $("activityLog").innerHTML='<div class="recent-empty">Loading activity…</div>';
+    try {
+      const data=await api("get_activity_log",{limit:50});
+      const rows=data.activities||[];
+      $("activityLog").innerHTML=rows.length?rows.map(a=>
+        '<div class="recent-item"><div><strong>'+esc(a.action)+'</strong><small>'+esc(a.target_email||a.target_user_id||"System")+'</small></div><div class="recent-meta">'+esc(fmtDateTime(a.created_at))+'</div></div>'
+      ).join(""):'<div class="recent-empty">No admin activity recorded yet.</div>';
+    } catch(e) {
+      $("activityLog").innerHTML='<div class="recent-empty error">'+esc(e.message)+'</div>';
+    }
+  }
+
+  async function loadHistory(id) {
+    $("subscriptionHistory").textContent="Loading…";
+    try {
+      const data=await api("get_subscription_history",{userId:id});
+      const rows=data.history||[];
+      $("subscriptionHistory").innerHTML=rows.length?rows.map(h=>
+        '<div class="record"><strong>'+esc(h.action)+'</strong> · '+esc(h.product_id)+' · '+esc(h.tier||"—")+
+        ' · '+esc(fmtDateTime(h.created_at))+(h.valid_until?' · until '+esc(fmtDate(h.valid_until)):"")+
+        (h.ocr_limit!==null&&h.ocr_limit!==undefined?' · OCR '+esc(h.ocr_limit):"")+
+        (h.note?' · '+esc(h.note):"")+'</div>'
+      ).join(""):'No subscription history yet.';
+    } catch(e) {
+      $("subscriptionHistory").textContent=e.message;
+    }
+  }
+
   async function loadDetail(id) {
     $("detailRecords").textContent = "Loading…";
     try {
@@ -157,6 +209,7 @@
     $("manageStatus").className = "modal-status";
     $("manageModal").classList.remove("hidden");
     loadDetail(id);
+    loadHistory(id);
   }
 
   async function loadUsers() {
@@ -170,6 +223,8 @@
       renderStats();
       renderUsers();
       renderAnalytics();
+      loadCatalog();
+      loadActivity();
       $("lastSync").textContent = "Synced " + new Date().toLocaleTimeString();
       $("adminStatus").textContent = state.users.length + " user" + (state.users.length === 1 ? "" : "s") + " loaded.";
       $("adminStatus").className = "status success";
@@ -296,6 +351,9 @@
   $("revokeBtn").addEventListener("click", revokeSubscription);
   $("resetOcrBtn").addEventListener("click", resetOcr);
   $("reloadDetailBtn").addEventListener("click", () => loadDetail($("manageUserId").value));
+  $("reloadHistoryBtn").addEventListener("click", () => loadHistory($("manageUserId").value));
+  $("reloadCatalogBtn").addEventListener("click", loadCatalog);
+  $("reloadActivityBtn").addEventListener("click", loadActivity);
   $("quickFilter").addEventListener("change", e => setQuick(e.target.value));
   $("userRows").addEventListener("click", e => {
     const b = e.target.closest("[data-action=manage]");
