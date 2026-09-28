@@ -2080,9 +2080,10 @@ function mcqInsertOption(paragraph, option, optionFont, optionSize, targetFont, 
         );
     }
 
-    // In Unicode + OMR/ProshnaP mode, only the option marker uses
-    // optionFont. The option's actual Bangla text must remain in targetFont.
-    const optionBodyFont = useSymbols && isUnicode ? targetFont : "";
+    // OMR/ProshnaP is a marker-only font. Whenever symbol-marker mode
+    // is enabled, ONLY the marker gets optionFont. The actual option text
+    // must always stay in the selected target font — Unicode or Bijoy.
+    const optionBodyFont = useSymbols ? targetFont : "";
     mcqInsertSourceText(
         paragraph,
         " " + text,
