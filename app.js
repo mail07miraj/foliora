@@ -1901,13 +1901,16 @@ function mcqInsertSourceText(paragraph, text, sourceRuns, fallbackStyle, forceBo
             eastAsia: segment.eastAsia || fallbackStyle?.eastAsia || "",
             fontSize: Number(segment.fontSize) || Number(fallbackSize) || Number(fallbackStyle?.fontSize) || 0
         };
-        mcqApplySourceFontSafe(
-            range,
-            style,
-            style.fontSize,
-            forceBold === true,
-            segment.italic === true ? true : forceItalic === true
-        );
+        function mcqApplySourceFontSafe(range, sourceStyle, fontSize, bold, italic) {
+            const style = sourceStyle || {};
+            const fontName = style.fontName || style.name || "";
+            if (fontName) {
+                range.font.name = fontName;
+            }
+            if (fontSize) range.font.size = fontSize;
+            range.font.bold = bold === true;
+            range.font.italic = italic === true;
+        }
     }
 }
 
@@ -1927,8 +1930,12 @@ function mcqExtractFontFromOoxml(ooxml, fallbackFont = "") {
         const hAnsi = get("hAnsi");
         const cs = get("cs");
         const eastAsia = get("eastAsia");
+
+        // টেক্সটে ইউনিকোড বাংলা থাকলে cs ফন্ট প্রাধান্য পাবে, নতুবা ascii/hAnsi
+        const effectiveFont = cs || ascii || hAnsi || eastAsia || fallbackFont || "";
+
         return {
-            name: ascii || hAnsi || cs || eastAsia || fallbackFont || "",
+            name: effectiveFont,
             ascii: ascii || "",
             hAnsi: hAnsi || "",
             cs: cs || "",
@@ -1938,10 +1945,16 @@ function mcqExtractFontFromOoxml(ooxml, fallbackFont = "") {
     const paragraphFont = xml.match(/<w:rFonts\b([^>]*)\/?>/i);
     if (paragraphFont) {
         const attrs = paragraphFont[1] || "";
-        for (const name of ["ascii", "hAnsi", "cs", "eastAsia"]) {
+        const get = (name) => {
             const m = attrs.match(new RegExp("w:" + name + '="([^"]+)"', "i"));
-            if (m && m[1]) return { name: m[1], ascii: m[1], hAnsi: m[1], cs: m[1], eastAsia: m[1] };
-        }
+            return m ? m[1] : "";
+        };
+        const ascii = get("ascii");
+        const hAnsi = get("hAnsi");
+        const cs = get("cs");
+        const eastAsia = get("eastAsia");
+        const effectiveFont = cs || ascii || hAnsi || eastAsia || fallbackFont || "";
+        return { name: effectiveFont, ascii, hAnsi, cs, eastAsia };
     }
     return { name: fallbackFont || "", ascii: fallbackFont || "", hAnsi: fallbackFont || "", cs: fallbackFont || "", eastAsia: fallbackFont || "" };
 }
