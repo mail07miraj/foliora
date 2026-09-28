@@ -610,7 +610,14 @@ function getSequenceString(index, style) {
     return toBanglaNumber(index + 1) + ". ";
 }
 
-function getStandardOptionMarker(label, isUnicode) {
+function getStandardOptionMarker(label, isUnicode, rawLabel) {
+    // Text mode must preserve the source option alphabet instead of converting
+    // every option to ক. খ. গ. ঘ.
+    const sourceLabel = String(rawLabel || "").trim();
+    if (/^[কখগঘA-Da-dK-Nk-n]$/.test(sourceLabel)) {
+        return sourceLabel + ".";
+    }
+
     const norm = normalizeAnswerLabel(label);
     if (isUnicode) return norm + ".";
     const map = { "ক": "K", "খ": "L", "গ": "M", "ঘ": "N" };
@@ -1524,7 +1531,13 @@ function mcqExtractInlineOptions(text) {
         const start = markers[i].end;
         const end = i + 1 < markers.length ? markers[i + 1].index : source.length;
         const optionText = source.slice(start, end).trim();
-        if (optionText) result.push([markers[i].label, optionText]);
+        if (optionText) {
+            const option = [markers[i].label, optionText];
+            // Keep the exact source letter (A/B/C/D, ক/খ/গ/ঘ, K/L/M/N, etc.)
+            // so "Text" marker formatting does not force everything to Bengali.
+            option._rawLabel = markers[i].rawLabel;
+            result.push(option);
+        }
     }
     return result;
 }
@@ -1614,7 +1627,12 @@ function parseQuestions(text) {
 
         const singleOptMatch = mcqGetOptionMarkerMatch(line);
         if (singleOptMatch) {
-            current.options.push([singleOptMatch.label, singleOptMatch.text]);
+            {
+                const option = [singleOptMatch.label, singleOptMatch.text];
+                // Preserve the exact source option letter for Text marker mode.
+                option._rawLabel = singleOptMatch.rawLabel;
+                current.options.push(option);
+            }
             continue;
         }
 
@@ -1642,6 +1660,19 @@ function parseQuestions(text) {
     flush();
     return questions;
 }
+function mcqGetOptionAlphabetSequence(options) {
+    const firstRaw = String(options?.find(o => o && o._rawLabel)?._rawLabel || "").trim();
+    if (/^[A-Da-d]$/.test(firstRaw)) {
+        const upper = firstRaw === firstRaw.toUpperCase();
+        return (upper ? ["A","B","C","D"] : ["a","b","c","d"]);
+    }
+    if (/^[K-Nk-n]$/.test(firstRaw)) {
+        const upper = firstRaw === firstRaw.toUpperCase();
+        return (upper ? ["K","L","M","N"] : ["k","l","m","n"]);
+    }
+    return ["ক","খ","গ","ঘ"];
+}
+
 function shuffleOptions(question) {
     if (!question.options || question.options.length < 2 || !question.answer) return question;
     
@@ -1659,11 +1690,15 @@ function shuffleOptions(question) {
         [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
 
+    const markerSequence = mcqGetOptionAlphabetSequence(question.options);
     let newOptions = [];
     let newAnswer = null;
     for (let i = 0; i < shuffled.length; i++) {
-        let newLabel = OPTION_ORDER[i] || shuffled[i][0];
-        newOptions.push([newLabel, shuffled[i][1]]);
+        let newLabel = markerSequence[i] || shuffled[i][0];
+        const newOption = [newLabel, shuffled[i][1]];
+        // Keep the same source alphabet after shuffling (A-D stays A-D, etc.).
+        newOption._rawLabel = newLabel;
+        newOptions.push(newOption);
         if (shuffled[i][1] === correctText) { newAnswer = newLabel; }
     }
     
@@ -1983,7 +2018,10 @@ function mcqApplyFontSafe(range, fontName, fontSize, bold, italic) {
 function mcqInsertOption(paragraph, option, optionFont, optionSize, targetFont, targetSize, origBold, origItalic, leadingTab, useSymbols, isUnicode) {
     if (!option) return;
     const labelText = option[0] || "";
-    const label = useSymbols ? (OPTION_EXPORT_MAP[labelText] || labelText) : getStandardOptionMarker(labelText, isUnicode);
+    const rawLabel = option._rawLabel || labelText;
+    const label = useSymbols
+        ? (OPTION_EXPORT_MAP[labelText] || labelText)
+        : getStandardOptionMarker(labelText, isUnicode, rawLabel);
     const sourceStyle = option._sourceStyle || {};
     const textFont = sourceStyle.fontName || targetFont;
     const textSize = Number(sourceStyle.fontSize) || targetSize;
