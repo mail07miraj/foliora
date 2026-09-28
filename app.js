@@ -1448,6 +1448,18 @@ function sanitizeQuestionAnswers(q) {
 }
 
 
+function mcqIsAnswerLine(line) {
+    const value = String(line || "").trim();
+    if (!value) return false;
+    return /^(?:সঠিক উত্তর|উত্তর|উ|Ans|Answer|mwVK DËi|DËi|D)\s*[:：\.]?/i.test(value);
+}
+
+function mcqIsExplanationLine(line) {
+    const value = String(line || "").trim();
+    if (!value) return false;
+    return /^(?:ব্যাখ্যা|Explanation|e¨vL¨v)\s*[:\-–—]?/i.test(value);
+}
+
 function mcqIsOptionLine(line) {
     return !!mcqGetOptionMarkerMatch(line);
 }
