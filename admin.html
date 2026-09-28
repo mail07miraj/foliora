@@ -26,7 +26,7 @@
   <main class="content">
     <section class="hero">
       <div><div class="eyebrow">ADMINISTRATOR CONSOLE</div><h1>Subscriber & Product Control</h1><p>Manage users, subscriptions, OCR quotas and account status from one place.</p></div>
-      <button id="refreshBtn" class="btn" type="button">Refresh data</button>
+      <div class="hero-actions"><button id="addSubscriberBtn" class="btn primary" type="button">+ Add subscriber</button><button id="refreshBtn" class="btn" type="button">Refresh data</button></div>
     </section>
 
     <section class="stats">
@@ -122,6 +122,14 @@
     </div>
 
     <input id="manageUserId" type="hidden">
+    <div class="credential-box">
+      <div class="section-subhead"><strong>Account credentials</strong><span>Leave password blank to keep it unchanged.</span></div>
+      <div class="form-grid">
+        <div class="field"><label for="manageEmailInput">Email</label><input id="manageEmailInput" type="email" autocomplete="off"></div>
+        <div class="field"><label for="manageNameInput">Name</label><input id="manageNameInput" type="text" autocomplete="off"></div>
+        <div class="field"><label for="managePasswordInput">New password</label><input id="managePasswordInput" type="password" autocomplete="new-password" placeholder="••••••••"></div>
+      </div>
+    </div>
     <div class="form-grid">
       <div class="field"><label for="planSelect">MCQ plan</label><select id="planSelect"><option value="pro">Pro</option><option value="free">Free</option></select></div>
       <div class="field"><label for="daysInput">Extend / activate for days</label><input id="daysInput" type="number" min="1" value="30"></div>
@@ -144,6 +152,37 @@
       <button id="revokeBtn" class="btn danger" type="button">Revoke MCQ</button>
     </div>
     <div id="manageStatus" class="modal-status"></div>
+  </div>
+</div>
+
+<div id="addSubscriberModal" class="modal hidden">
+  <div class="modal-box compact-modal">
+    <div class="modal-head"><div><div class="eyebrow">NEW SUBSCRIBER</div><h2>Add subscriber</h2></div><button id="closeAddSubscriber" type="button" aria-label="Close">×</button></div>
+    <div class="form-grid">
+      <div class="field"><label for="newUserName">Name</label><input id="newUserName" type="text" required></div>
+      <div class="field"><label for="newUserEmail">Email</label><input id="newUserEmail" type="email" required></div>
+      <div class="field"><label for="newUserPassword">Password</label><input id="newUserPassword" type="password" autocomplete="new-password" required></div>
+      <div class="field"><label for="newUserPlan">Initial MCQ plan</label><select id="newUserPlan"><option value="free">Free</option><option value="pro">Pro</option></select></div>
+      <div class="field"><label for="newUserDays">Validity (days)</label><input id="newUserDays" type="number" min="1" value="30"></div>
+      <div class="field"><label for="newUserOcr">OCR monthly limit</label><input id="newUserOcr" type="number" min="0" value="10"></div>
+    </div>
+    <div class="actions"><button id="createSubscriberBtn" class="btn primary" type="button">Create subscriber</button><button id="cancelAddSubscriber" class="btn" type="button">Cancel</button></div>
+    <div id="addSubscriberStatus" class="modal-status"></div>
+  </div>
+</div>
+
+<div id="planModal" class="modal hidden">
+  <div class="modal-box compact-modal">
+    <div class="modal-head"><div><div class="eyebrow">PLAN CONTROL</div><h2>Edit plan</h2></div><button id="closePlanModal" type="button" aria-label="Close">×</button></div>
+    <input id="planEditId" type="hidden">
+    <div class="field"><label for="planEditName">Plan name</label><input id="planEditName" type="text"></div>
+    <div class="form-grid">
+      <div class="field"><label for="planEditPrice">Price</label><input id="planEditPrice" type="number" min="0" step="0.01"></div>
+      <div class="field"><label for="planEditValidity">Validity (days)</label><input id="planEditValidity" type="number" min="1"></div>
+    </div>
+    <p class="modal-status">The editor detects the matching price/name/validity columns in your <code>plans</code> table.</p>
+    <div class="actions"><button id="savePlanBtn" class="btn primary" type="button">Save plan</button><button id="cancelPlanBtn" class="btn" type="button">Cancel</button></div>
+    <div id="planStatus" class="modal-status"></div>
   </div>
 </div>
 
